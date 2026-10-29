@@ -1,8 +1,11 @@
 import { Router } from '@aws-lambda-powertools/event-handler/http';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
+import { createLocationSchema } from './schemas';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { LocationCreateData } from './interfaces';
+import { z } from 'zod';
+
 
 const router = new Router();
 const ddbClient = new DynamoDBClient({});
@@ -18,10 +21,10 @@ router.post('/api/v1/locations', async ({ req }) => {
 
   const data = (await req.json()) as LocationCreateData;
   if (!data || typeof data !== 'object') {
-    return Response.json(
-      { error: `Invalid JSON payload received: ${data}` },
-      { status: 400 }
-    )
+    return {
+      statusCode: 400,
+      body: { error: `Invalid JSON payload received: ${data}` },
+    }
   }
 
   const newLocation = {
@@ -41,14 +44,23 @@ router.post('/api/v1/locations', async ({ req }) => {
       })
     );
 
-    return Response.json(newLocation, { status: 201 });
+    return {
+      statusCode: 201,
+      body: newLocation
+    };
   }
   catch (err) {
     console.error('Error writing to database: ', err);
-     return Response.json(
-      { error: 'Failed to create location' },
-      { status: 500 }
-    );
+     return {
+      statusCode: 500,
+      body: { error: 'Failed to create location' },
+     };
+  }
+}, {
+  validation: {
+    req: {
+      body: createLocationSchema
+    }
   }
 });
 
