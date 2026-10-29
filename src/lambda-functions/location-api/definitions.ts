@@ -11,3 +11,10 @@ export interface LocationUpdateData {
   state?: string;
   country?: string;
 };
+
+export enum LocationCoordinatesStatus {
+  MATCHED = 'MATCHED',
+  NOT_FOUND = 'NOT_FOUND',
+  PENDING = 'PENDING',
+}
+

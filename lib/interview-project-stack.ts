@@ -8,16 +8,17 @@ import { Construct } from 'constructs';
 // import * as sqs from 'aws-cdk-lib/aws-sqs';
 
 
-const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME = 'LocationsTable';
+const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME || 'Locations';
 
 export class InterviewProjectStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    new dynamodb.TableV2(
+    const locationsTable = new dynamodb.TableV2(
       this,
-      LOCATIONS_TABLE_NAME,
+      'LocationsTable',
       {
+        tableName: LOCATIONS_TABLE_NAME,
         partitionKey: {
           name: 'id',
           type: dynamodb.AttributeType.STRING,
@@ -31,6 +32,9 @@ export class InterviewProjectStack extends cdk.Stack {
       {
         runtime: lambda.Runtime.NODEJS_22_X,
         entry: path.join(__dirname, '../src/lambda-functions/location-api/api.ts'),
+        environment: {
+          LOCATIONS_TABLE_NAME: locationsTable.tableName,
+        },
         handler: 'index.handler',
         bundling: {
           minify: true,

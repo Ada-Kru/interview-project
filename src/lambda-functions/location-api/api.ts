@@ -10,7 +10,11 @@ import {
   ScanCommand,
   UpdateCommand
 } from '@aws-sdk/lib-dynamodb';
-import { LocationCreateData, LocationUpdateData } from './interfaces';
+import {
+  LocationCoordinatesStatus,
+  LocationCreateData,
+  LocationUpdateData
+} from './definitions';
 
 
 const router = new Router();
@@ -34,7 +38,7 @@ router.get('/api/v1/locations', async () => {
     console.error('Error fetching locations: ', err);
     return {
       statusCode: 500,
-      body: { error: 'Failed to create location' },
+      body: { error: 'Failed to fetch locations' },
     };
   }
 });
@@ -83,6 +87,9 @@ router.post('/api/v1/locations', async ({ req }) => {
     city: data.city,
     state: data.state,
     country: data.country,
+    latitude: null,
+    longitude: null,
+    status: LocationCoordinatesStatus.PENDING,
     createdAt: new Date().toISOString(),
   };
 
