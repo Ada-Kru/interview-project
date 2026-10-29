@@ -5,7 +5,10 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "local-bootstrap": "lstk cdk bootstrap",
+    "local-synth": "lstk cdk synth",
+    "local-deploy": "lstk cdk deploy"
   },
   "devDependencies": {
     "@swc/core": "^1.15.0",
