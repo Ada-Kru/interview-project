@@ -3,7 +3,13 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda
 import { buildUpdateParams } from '../../helpers/dynamoDbUpdate';
 import { createLocationSchema, updateLocationSchema } from './schemas';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  ScanCommand,
+  UpdateCommand
+} from '@aws-sdk/lib-dynamodb';
 import { LocationCreateData, LocationUpdateData } from './interfaces';
 
 
@@ -14,7 +20,57 @@ const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 
 router.get('/api/v1/locations', async () => {
 
-  return [{ id: 'TEST' }];
+  try {
+    const allLocations = await docClient.send(
+      new ScanCommand({ TableName: LOCATIONS_TABLE_NAME })
+    );
+
+    return {
+      statusCode: 201,
+      body: allLocations.Items ?? [],
+    };
+  }
+  catch (err) {
+    console.error('Error fetching locations: ', err);
+    return {
+      statusCode: 500,
+      body: { error: 'Failed to create location' },
+    };
+  }
+});
+
+
+router.get('/api/v1/locations/:id', async ({ params }) => {
+
+  const { id } = params;
+
+  try {
+    const matchedLocation = (await docClient.send(
+      new GetCommand({
+        TableName: LOCATIONS_TABLE_NAME,
+        Key: { id }
+      })
+    )).Item;
+
+    if (!matchedLocation) {
+      return {
+        statusCode: 404,
+        body: { error: 'Location not found' },
+      };
+    }
+
+    return {
+      statusCode: 201,
+      body: matchedLocation
+    };
+  }
+  catch (err) {
+    console.error('Error creating location: ', err);
+    return {
+      statusCode: 500,
+      body: { error: 'Failed to create location' },
+    };
+  }
 });
 
 router.post('/api/v1/locations', async ({ req }) => {
@@ -65,12 +121,12 @@ router.patch('/api/v1/locations/:id', async ({ req, params }) => {
   const body = (await req.json()) as LocationUpdateData
 
   try {
-    const matchedLocation = await docClient.send(
+    const matchedLocation = (await docClient.send(
       new GetCommand({
         TableName: LOCATIONS_TABLE_NAME,
         Key: { id }
       })
-    );
+    )).Item;
 
     if (!matchedLocation) {
       return {
@@ -103,7 +159,7 @@ router.patch('/api/v1/locations/:id', async ({ req, params }) => {
 }, {
   validation: {
     req: {
-      body: createLocationSchema
+      body: updateLocationSchema
     }
   }
 });
