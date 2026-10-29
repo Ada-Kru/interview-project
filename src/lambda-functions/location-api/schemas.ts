@@ -21,3 +21,27 @@ export const updateLocationSchema = z.object({
   message: 'At least one field must be provided',
   path: [],
 });
+
+export const listLocationsSchema = z.object({
+  limit: z
+    .string()
+    .optional()
+    .transform((val) => (val ? parseInt(val, 10) : 100))
+    .pipe(z.number().int().positive().max(1000)),
+  nextToken: z.string().optional()
+});
+
+const singleLocationResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  city: z.string(),
+  state: z.string(),
+  country: z.string(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+});
+
+export const listLocationsResponseSchema = z.object({
+  items: z.array(singleLocationResponseSchema),
+  nextToken: z.string().nullable()
+});

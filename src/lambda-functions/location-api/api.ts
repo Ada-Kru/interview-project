@@ -1,13 +1,19 @@
 import { Router } from '@aws-lambda-powertools/event-handler/http';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
 import { buildUpdateParams } from '../../helpers/dynamoDbUpdate';
-import { createLocationSchema, updateLocationSchema } from './schemas';
+import {
+  createLocationSchema,
+  listLocationsResponseSchema,
+  listLocationsSchema,
+  updateLocationSchema
+} from './schemas';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
-  ScanCommand,
+  QueryCommand,
+  type QueryCommandInput,
   UpdateCommand
 } from '@aws-sdk/lib-dynamodb';
 import {
@@ -22,16 +28,60 @@ const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 
-router.get('/api/v1/locations', async () => {
+router.get('/api/v1/locations', async ({ params }) => {
+
+  const limit = parseInt(params.limit || '100') || 100;
+  const nextToken = params.next;
+
+  let exclusiveStartKey = undefined;
+  if (nextToken) {
+    try {
+      exclusiveStartKey = JSON.parse(
+        Buffer.from(nextToken, 'base64').toString('utf-8')
+      );
+    } catch (err) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Invalid "next" pagination token' }),
+      };
+    }
+  }
 
   try {
+    const commandParams: QueryCommandInput = {
+      TableName: LOCATIONS_TABLE_NAME,
+      IndexName: "IdxSortById",
+      KeyConditionExpression: "gsiPartition = :gsiPk",
+      ExpressionAttributeValues: {
+        ":gsiPk": "ALL_ITEMS"
+      },
+      Limit: limit,
+      ScanIndexForward: true
+    };
+
+    if (exclusiveStartKey) {
+      commandParams.ExclusiveStartKey = exclusiveStartKey;
+    }
+
     const allLocations = await docClient.send(
-      new ScanCommand({ TableName: LOCATIONS_TABLE_NAME })
+      new QueryCommand(commandParams)
     );
+
+    let newNextToken = null;
+    if (allLocations.LastEvaluatedKey) {
+      newNextToken = Buffer.from(
+        JSON.stringify(allLocations.LastEvaluatedKey)
+      ).toString('base64');
+    }
+
+    const validatedResponseBody = listLocationsResponseSchema.parse({
+      items: allLocations.Items ?? [],
+      nextToken: newNextToken
+    });
 
     return {
       statusCode: 201,
-      body: allLocations.Items ?? [],
+      body: validatedResponseBody,
     };
   }
   catch (err) {
@@ -40,6 +90,12 @@ router.get('/api/v1/locations', async () => {
       statusCode: 500,
       body: { error: 'Failed to fetch locations' },
     };
+  }
+}, {
+  validation: {
+    req: {
+      query: listLocationsSchema
+    }
   }
 });
 
@@ -91,6 +147,7 @@ router.post('/api/v1/locations', async ({ req }) => {
     longitude: null,
     status: LocationCoordinatesStatus.PENDING,
     createdAt: new Date().toISOString(),
+    gsiPartition: 'ALL_ITEMS',
   };
 
   try {

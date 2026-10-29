@@ -26,6 +26,13 @@ export class InterviewProjectStack extends cdk.Stack {
       },
     );
 
+    locationsTable.addGlobalSecondaryIndex({
+      indexName: 'IdxSortById',
+      partitionKey: { name: 'gsiPartition', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      projectionType: dynamodb.ProjectionType.ALL, 
+    });
+
     const locationsApiHandler = new NodejsFunction(
       this,
       'LocationsApiHandler',
