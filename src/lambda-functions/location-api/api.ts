@@ -1,10 +1,10 @@
 import { Router } from '@aws-lambda-powertools/event-handler/http';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { createLocationSchema } from './schemas';
+import { buildUpdateParams } from '../../helpers/dynamoDbUpdate';
+import { createLocationSchema, updateLocationSchema } from './schemas';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
-import { LocationCreateData } from './interfaces';
-import { z } from 'zod';
+import { DynamoDBDocumentClient, GetCommand, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { LocationCreateData, LocationUpdateData } from './interfaces';
 
 
 const router = new Router();
@@ -20,12 +20,6 @@ router.get('/api/v1/locations', async () => {
 router.post('/api/v1/locations', async ({ req }) => {
 
   const data = (await req.json()) as LocationCreateData;
-  if (!data || typeof data !== 'object') {
-    return {
-      statusCode: 400,
-      body: { error: `Invalid JSON payload received: ${data}` },
-    }
-  }
 
   const newLocation = {
     id: crypto.randomUUID(),
@@ -54,6 +48,56 @@ router.post('/api/v1/locations', async ({ req }) => {
      return {
       statusCode: 500,
       body: { error: 'Failed to create location' },
+     };
+  }
+}, {
+  validation: {
+    req: {
+      body: createLocationSchema
+    }
+  }
+});
+
+
+router.patch('/api/v1/locations/:id', async ({ req, params }) => {
+
+  const { id } = params;
+  const body = (await req.json()) as LocationUpdateData
+
+  try {
+    const matchedLocation = await docClient.send(
+      new GetCommand({
+        TableName: LOCATIONS_TABLE_NAME,
+        Key: { id }
+      })
+    );
+
+    if (!matchedLocation) {
+      return {
+        statusCode: 404,
+        body: { error: 'Location not found' },
+      };
+    }
+
+    const patchResult = await docClient.send(
+      new UpdateCommand({
+        TableName: LOCATIONS_TABLE_NAME,
+        Key: { id },
+        ...buildUpdateParams(body),
+        ReturnValues: 'ALL_NEW'
+      })
+    );
+
+    return {
+      statusCode: 201,
+      body: patchResult.Attributes,
+    };
+  }
+  catch (err) {
+    console.error('Error patching location: ', err);
+     return {
+      statusCode: 500,
+      body: { error: 'Failed to update location' },
      };
   }
 }, {
