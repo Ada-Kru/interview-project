@@ -304,6 +304,19 @@ async function listAllLocations(request: APIRequestContext): Promise<LocationRec
   throw new Error('Location pagination did not terminate');
 }
 
+async function listLocationsPage(
+  request: APIRequestContext,
+  params: { limit?: number; nextToken?: string } = {}
+): Promise<{ items: LocationRecord[]; nextToken: string | null }> {
+  const response = await request.get(LOCATIONS_PATH, { params });
+
+  expect(response.status()).toBe(200);
+  return (await response.json()) as {
+    items: LocationRecord[];
+    nextToken: string | null;
+  };
+}
+
 test.beforeEach(async () => {
   await clearLocationsTable();
 });
@@ -348,6 +361,51 @@ test('GET /api/v1/locations/:id returns the created location', async ({ request 
   expect(await response.json()).toMatchObject({
     id: created.id,
     ...payload,
+  });
+});
+
+test.describe('GET /api/v1/locations pagination', () => {
+  test('honors limit and pages through results with nextToken', async ({
+    request,
+  }) => {
+    const createdIds = new Set<string>();
+    for (let i = 0; i < 3; i++) {
+      const { body } = await createLocation(request);
+      createdIds.add(body.id);
+    }
+
+    const firstPage = await listLocationsPage(request, { limit: 2 });
+    expect(firstPage.items).toHaveLength(2);
+    expect(firstPage.nextToken).toEqual(expect.any(String));
+
+    const firstPageIds = firstPage.items.map((location) => location.id);
+    expect(new Set(firstPageIds).size).toBe(2);
+    for (const id of firstPageIds) {
+      expect(createdIds.has(id), `Unexpected id on first page: ${id}`).toBe(true);
+    }
+
+    const secondPage = await listLocationsPage(request, {
+      limit: 2,
+      nextToken: firstPage.nextToken as string,
+    });
+    expect(secondPage.items).toHaveLength(1);
+    expect(secondPage.nextToken).toBeNull();
+
+    const secondPageId = secondPage.items[0].id;
+    expect(createdIds.has(secondPageId), `Unexpected id on second page: ${secondPageId}`).toBe(true);
+    expect(firstPageIds).not.toContain(secondPageId);
+
+    expect([...firstPageIds, secondPageId].sort()).toEqual(
+      [...createdIds].sort()
+    );
+
+    const defaultPage = await listLocationsPage(request);
+    expect(defaultPage.items).toHaveLength(3);
+    expect(defaultPage.nextToken).toBeNull();
+
+    const singleItemPage = await listLocationsPage(request, { limit: 1 });
+    expect(singleItemPage.items).toHaveLength(1);
+    expect(singleItemPage.nextToken).toEqual(expect.any(String));
   });
 });
 

@@ -30,10 +30,9 @@ const LOCATIONS_GEODATA_QUEUE_URL = process.env.LOCATIONS_GEODATA_QUEUE_URL;
 const normalizePlacePart = (value: string) =>
   value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
 
-router.get('/api/v1/locations', async ({ params }) => {
+router.get('/api/v1/locations', async ({ valid }) => {
 
-  const limit = parseInt(params.limit || '100') || 100;
-  const nextToken = params.nextToken;
+  const { limit, nextToken } = valid.req.query;
 
   let exclusiveStartKey = undefined;
   if (nextToken) {
