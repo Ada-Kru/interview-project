@@ -39,6 +39,11 @@ bower_components/
 *.swp
 *.swo
 
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+
 ehthumbs.db
 Thumbs.db
 EOL

@@ -5,12 +5,14 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "jest",
+    "test:api": "tsx scripts/run-api-tests.ts",
     "cdk": "cdk",
     "local-bootstrap": "lstk cdk bootstrap",
     "local-synth": "lstk cdk synth",
     "local-deploy": "lstk cdk deploy"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@swc/core": "^1.15.0",
     "@swc/jest": "^0.2.39",
     "@types/aws-lambda": "^8.10.164",

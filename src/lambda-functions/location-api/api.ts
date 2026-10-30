@@ -34,7 +34,7 @@ const LOCATIONS_GEODATA_QUEUE_URL = process.env.LOCATIONS_GEODATA_QUEUE_URL;
 router.get('/api/v1/locations', async ({ params }) => {
 
   const limit = parseInt(params.limit || '100') || 100;
-  const nextToken = params.next;
+  const nextToken = params.nextToken;
 
   let exclusiveStartKey = undefined;
   if (nextToken) {
@@ -83,7 +83,7 @@ router.get('/api/v1/locations', async ({ params }) => {
     });
 
     return {
-      statusCode: 201,
+      statusCode: 200,
       body: validatedResponseBody,
     };
   }
@@ -123,7 +123,7 @@ router.get('/api/v1/locations/:id', async ({ params }) => {
     }
 
     return {
-      statusCode: 201,
+      statusCode: 200,
       body: matchedLocation
     };
   }
