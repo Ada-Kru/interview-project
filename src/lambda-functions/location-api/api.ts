@@ -6,7 +6,7 @@ import {
   listLocationsResponseSchema,
   listLocationsSchema,
   updateLocationSchema
-} from './schemas';
+} from './definitions/schemas';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
   DynamoDBDocumentClient,
@@ -20,13 +20,16 @@ import {
   LocationCoordinatesStatus,
   LocationCreateData,
   LocationUpdateData
-} from './definitions';
+} from './definitions/types';
+import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 
 
 const router = new Router();
 const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
+const sqsClient = new SQSClient({});
 const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
+const LOCATIONS_GEODATA_QUEUE_URL = process.env.LOCATIONS_GEODATA_QUEUE_URL;
 
 router.get('/api/v1/locations', async ({ params }) => {
 
@@ -158,6 +161,13 @@ router.post('/api/v1/locations', async ({ req }) => {
       })
     );
 
+    await sqsClient.send(
+      new SendMessageCommand({
+        QueueUrl: LOCATIONS_GEODATA_QUEUE_URL,
+        MessageBody: JSON.stringify({ id: newLocation.id }),
+      })
+    );
+
     return {
       statusCode: 201,
       body: newLocation
@@ -207,6 +217,19 @@ router.patch('/api/v1/locations/:id', async ({ req, params }) => {
         ReturnValues: 'ALL_NEW'
       })
     );
+
+    if (
+      (body.city && body.city !== matchedLocation.city) ||
+      (body.state && body.city !== matchedLocation.state) ||
+      (body.country && body.city !== matchedLocation.country)
+    ) {
+      await sqsClient.send(
+        new SendMessageCommand({
+          QueueUrl: LOCATIONS_GEODATA_QUEUE_URL,
+          MessageBody: JSON.stringify({ id }),
+        })
+      );
+    }
 
     return {
       statusCode: 201,
