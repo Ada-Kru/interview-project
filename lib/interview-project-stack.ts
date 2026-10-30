@@ -69,6 +69,7 @@ export class InterviewProjectStack extends cdk.Stack {
         },
         handler: 'index.handler',
         timeout: Duration.seconds(30),
+        reservedConcurrentExecutions: 1,
         bundling: {
           minify: true,
           sourceMap: true,

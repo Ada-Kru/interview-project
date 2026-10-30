@@ -10,6 +10,11 @@ const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 const USER_AGENT = 'Interview Project (https://github.com/Ada-Kru/interview-project)';
 const MAX_RECEIVE_COUNT = Number(process.env.FETCH_GEODATA_MAX_RECEIVE_COUNT ?? 5);
 
+// Nominatim (OpenStreetMap) allows at most 1 request per second per application.
+const OSM_REQUEST_INTERVAL_MS = 1000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const batchItemFailures: SQSBatchItemFailure[] = [];
   for (const record of event.Records) {
@@ -33,15 +38,21 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
         format: 'json',
       });
       const geoServiceUrl = `https://nominatim.openstreetmap.org/search?${searchParams}`;
-      const geoResponse = await fetch(
-        geoServiceUrl, {
-          signal: AbortSignal.timeout(12000),
-          headers: {
-            'Accept': 'application/json',
-            'User-Agent': USER_AGENT,
+      let geoResponse: Response;
+      try {
+        geoResponse = await fetch(
+          geoServiceUrl, {
+            signal: AbortSignal.timeout(12000),
+            headers: {
+              'Accept': 'application/json',
+              'User-Agent': USER_AGENT,
+            }
           }
-        }
-      );
+        );
+      } finally {
+        // enforce 1 request per second rate limit even on failures
+        await sleep(OSM_REQUEST_INTERVAL_MS);
+      }
 
       if (geoResponse.status >= 300) {
         throw new Error(`OSM API Error ${geoResponse.status}`);
