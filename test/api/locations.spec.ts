@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test, type APIRequestContext } from '@playwright/test';
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+} from '@playwright/test';
 import { clearLocationsTable } from './helpers/locations-db';
 
 const LOCATIONS_PATH = 'api/v1/locations';
@@ -18,7 +23,22 @@ type LocationRecord = LocationPayload & {
   id: string;
   latitude: number | null;
   longitude: number | null;
+  createdAt: string;
   status?: 'PENDING' | 'MATCHED' | 'NOT_FOUND' | 'ERROR';
+};
+
+type ValidationIssue = {
+  message: string;
+  path: string[];
+};
+
+type ValidationErrorResponse = {
+  statusCode: number;
+  error: string;
+  message: string;
+  details: {
+    issues: ValidationIssue[];
+  };
 };
 
 type Coordinates = {
@@ -60,6 +80,32 @@ const TORONTO_COORDINATES: Coordinates = {
   latitude: 43.6535,
   longitude: -79.3839,
 };
+
+const REQUIRED_LOCATION_FIELDS = ['name', 'city', 'state', 'country'] as const;
+
+const TOO_LONG_FIELDS: Array<{ field: keyof LocationPayload; value: string }> = [
+  { field: 'name', value: 'a'.repeat(513) },
+  { field: 'city', value: 'a'.repeat(257) },
+  { field: 'state', value: 'a'.repeat(65) },
+  { field: 'country', value: 'a'.repeat(65) },
+];
+
+const TOO_SHORT_FIELDS: Array<{ field: keyof LocationPayload; value: string }> = [
+  { field: 'name', value: 'ab' },
+  { field: 'city', value: '' },
+  { field: 'state', value: 'W' },
+  { field: 'country', value: 'USA' },
+];
+
+const INVALID_TYPE_FIELDS: Array<{
+  field: keyof LocationPayload;
+  value: unknown;
+}> = [
+  { field: 'name', value: 123 },
+  { field: 'city', value: null },
+  { field: 'state', value: ['WA'] },
+  { field: 'country', value: { name: 'United States' } },
+];
 
 function buildLocation(overrides: Partial<LocationPayload> = {}): LocationPayload {
   return {
@@ -105,6 +151,58 @@ async function patchLocation(
 
   expect(response.status()).toBe(201);
   return (await response.json()) as LocationRecord;
+}
+
+async function expectValidationError(
+  response: APIResponse,
+  expectedPaths: string[][],
+  expectedMessage = 'Validation failed for request'
+): Promise<ValidationErrorResponse> {
+  expect(
+    response.status(),
+    `Expected a validation failure but got HTTP ${response.status()}`
+  ).toBe(422);
+
+  const body = (await response.json()) as ValidationErrorResponse;
+
+  expect(body).toMatchObject({
+    statusCode: 422,
+    error: 'RequestValidationError',
+    message: expectedMessage,
+  });
+
+  expect(body.details.issues).toEqual(
+    expect.arrayContaining(
+      expectedPaths.map((path) =>
+        expect.objectContaining({
+          path,
+          message: expect.any(String),
+        })
+      )
+    )
+  );
+
+  return body;
+}
+
+async function expectNoLocations(request: APIRequestContext): Promise<void> {
+  expect(await listAllLocations(request)).toHaveLength(0);
+}
+
+async function expectLocationUnchanged(
+  request: APIRequestContext,
+  original: LocationRecord
+): Promise<void> {
+  const current = await getLocation(request, original.id);
+
+  expect(current).toMatchObject({
+    id: original.id,
+    name: original.name,
+    city: original.city,
+    state: original.state,
+    country: original.country,
+    createdAt: original.createdAt,
+  });
 }
 
 function isWithinTolerance(
@@ -552,5 +650,201 @@ test.describe('OpenStreetMap geocoding', () => {
       latitude: initial.latitude,
       longitude: initial.longitude,
     });
+  });
+});
+
+test.describe('POST /api/v1/locations validation', () => {
+  test('rejects a payload with every required field missing', async ({ request }) => {
+    const response = await request.post(LOCATIONS_PATH, { data: {} });
+
+    await expectValidationError(
+      response,
+      REQUIRED_LOCATION_FIELDS.map((field) => ['body', field])
+    );
+    await expectNoLocations(request);
+  });
+
+  for (const field of REQUIRED_LOCATION_FIELDS) {
+    test(`rejects a payload missing "${field}"`, async ({ request }) => {
+      const payload = { ...buildLocation() } as Record<string, unknown>;
+      delete payload[field];
+
+      const response = await request.post(LOCATIONS_PATH, { data: payload });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectNoLocations(request);
+    });
+  }
+
+  for (const { field, value } of TOO_LONG_FIELDS) {
+    test(`rejects a "${field}" longer than the allowed maximum`, async ({
+      request,
+    }) => {
+      const response = await request.post(LOCATIONS_PATH, {
+        data: { ...buildLocation(), [field]: value },
+      });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectNoLocations(request);
+    });
+  }
+
+  for (const { field, value } of TOO_SHORT_FIELDS) {
+    test(`rejects a "${field}" that is too short after trimming`, async ({
+      request,
+    }) => {
+      const response = await request.post(LOCATIONS_PATH, {
+        data: { ...buildLocation(), [field]: value },
+      });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectNoLocations(request);
+    });
+  }
+
+  for (const { field, value } of INVALID_TYPE_FIELDS) {
+    test(`rejects a non-string "${field}"`, async ({ request }) => {
+      const response = await request.post(LOCATIONS_PATH, {
+        data: { ...buildLocation(), [field]: value },
+      });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectNoLocations(request);
+    });
+  }
+
+  test('rejects whitespace-only fields', async ({ request }) => {
+    const response = await request.post(LOCATIONS_PATH, {
+      data: { name: '   ', city: '   ', state: '   ', country: '   ' },
+    });
+
+    await expectValidationError(
+      response,
+      REQUIRED_LOCATION_FIELDS.map((field) => ['body', field])
+    );
+    await expectNoLocations(request);
+  });
+
+  test('rejects a malformed JSON body', async ({ request }) => {
+    const response = await request.post(LOCATIONS_PATH, {
+      headers: { 'Content-Type': 'application/json' },
+      data: Buffer.from('{"name":'),
+    });
+
+    const body = await expectValidationError(
+      response,
+      [],
+      'Validation failed for request body'
+    );
+    expect(body.details.issues).toEqual([]);
+    await expectNoLocations(request);
+  });
+});
+
+test.describe('PATCH /api/v1/locations/:id validation', () => {
+  test('rejects an empty patch body', async ({ request }) => {
+    const { body: created } = await createLocation(request);
+
+    const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+      data: {},
+    });
+
+    const body = await expectValidationError(response, [['body']]);
+    expect(body.details.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: ['body'],
+          message: 'At least one field must be provided',
+        }),
+      ])
+    );
+    await expectLocationUnchanged(request, created);
+  });
+
+  for (const { field, value } of TOO_LONG_FIELDS) {
+    test(`rejects a "${field}" longer than the allowed maximum`, async ({
+      request,
+    }) => {
+      const { body: created } = await createLocation(request);
+
+      const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+        data: { [field]: value },
+      });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectLocationUnchanged(request, created);
+    });
+  }
+
+  for (const { field, value } of TOO_SHORT_FIELDS) {
+    test(`rejects a "${field}" that is too short after trimming`, async ({
+      request,
+    }) => {
+      const { body: created } = await createLocation(request);
+
+      const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+        data: { [field]: value },
+      });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectLocationUnchanged(request, created);
+    });
+  }
+
+  for (const { field, value } of INVALID_TYPE_FIELDS) {
+    test(`rejects a non-string "${field}"`, async ({ request }) => {
+      const { body: created } = await createLocation(request);
+
+      const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+        data: { [field]: value },
+      });
+
+      await expectValidationError(response, [['body', field]]);
+      await expectLocationUnchanged(request, created);
+    });
+  }
+
+  test('rejects whitespace-only fields', async ({ request }) => {
+    const { body: created } = await createLocation(request);
+
+    const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+      data: { name: '   ', city: '   ', state: '   ', country: '   ' },
+    });
+
+    await expectValidationError(
+      response,
+      REQUIRED_LOCATION_FIELDS.map((field) => ['body', field])
+    );
+    await expectLocationUnchanged(request, created);
+  });
+
+  test('rejects the whole update when one field is invalid', async ({
+    request,
+  }) => {
+    const { body: created } = await createLocation(request);
+
+    const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+      data: { name: 'Valid updated name', city: 'a'.repeat(257) },
+    });
+
+    await expectValidationError(response, [['body', 'city']]);
+    await expectLocationUnchanged(request, created);
+  });
+
+  test('rejects a malformed JSON body', async ({ request }) => {
+    const { body: created } = await createLocation(request);
+
+    const response = await request.patch(`${LOCATIONS_PATH}/${created.id}`, {
+      headers: { 'Content-Type': 'application/json' },
+      data: Buffer.from('{"name":'),
+    });
+
+    const body = await expectValidationError(
+      response,
+      [],
+      'Validation failed for request body'
+    );
+    expect(body.details.issues).toEqual([]);
+    await expectLocationUnchanged(request, created);
   });
 });
