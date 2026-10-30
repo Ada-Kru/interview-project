@@ -209,20 +209,29 @@ router.patch('/api/v1/locations/:id', async ({ req, params }) => {
       };
     }
 
+    const locationChanged = (['city', 'state', 'country'] as const).some(
+      (field) => body[field] !== undefined && body[field] !== matchedLocation[field]
+    );
+
     const patchResult = await docClient.send(
       new UpdateCommand({
         TableName: LOCATIONS_TABLE_NAME,
         Key: { id },
-        ...buildUpdateParams(body),
+        ...buildUpdateParams(
+          locationChanged
+            ? {
+                ...body,
+                latitude: null,
+                longitude: null,
+                status: LocationCoordinatesStatus.PENDING,
+              }
+            : body
+        ),
         ReturnValues: 'ALL_NEW'
       })
     );
 
-    if (
-      (body.city && body.city !== matchedLocation.city) ||
-      (body.state && body.city !== matchedLocation.state) ||
-      (body.country && body.city !== matchedLocation.country)
-    ) {
+    if (locationChanged) {
       await sqsClient.send(
         new SendMessageCommand({
           QueueUrl: LOCATIONS_GEODATA_QUEUE_URL,

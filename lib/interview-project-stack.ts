@@ -11,6 +11,7 @@ import { Duration } from 'aws-cdk-lib/core';
 
 
 const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME || 'Locations';
+const FETCH_GEODATA_MAX_RECEIVE_COUNT = 5;
 
 export class InterviewProjectStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -48,7 +49,7 @@ export class InterviewProjectStack extends cdk.Stack {
         visibilityTimeout: Duration.minutes(5),
         deadLetterQueue: {
           queue: fetchGeodataDLQ,
-          maxReceiveCount: 5
+          maxReceiveCount: FETCH_GEODATA_MAX_RECEIVE_COUNT
         }
       }
     );
@@ -64,6 +65,7 @@ export class InterviewProjectStack extends cdk.Stack {
         ),
         environment: {
           LOCATIONS_TABLE_NAME: locationsTable.tableName,
+          FETCH_GEODATA_MAX_RECEIVE_COUNT: String(FETCH_GEODATA_MAX_RECEIVE_COUNT),
         },
         handler: 'index.handler',
         timeout: Duration.seconds(30),

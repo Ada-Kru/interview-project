@@ -2,6 +2,7 @@ export enum LocationCoordinatesStatus {
   MATCHED = 'MATCHED',
   NOT_FOUND = 'NOT_FOUND',
   PENDING = 'PENDING',
+  ERROR = 'ERROR',
 }
 
 export interface Location {

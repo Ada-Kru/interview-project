@@ -19,7 +19,7 @@ type LocationRecord = LocationPayload & {
   id: string;
   latitude: number | null;
   longitude: number | null;
-  status?: 'PENDING' | 'MATCHED' | 'NOT_FOUND';
+  status?: 'PENDING' | 'MATCHED' | 'NOT_FOUND' | 'ERROR';
 };
 
 type Coordinates = {
@@ -307,6 +307,9 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Eugene',
       state: 'Oregon',
       country: 'United States',
+      status: 'PENDING',
+      latitude: null,
+      longitude: null,
     });
 
     const updated = await waitForGeocodedLocation(
@@ -355,6 +358,9 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Portland',
       state: 'Maine',
       country: 'United States',
+      status: 'PENDING',
+      latitude: null,
+      longitude: null,
     });
 
     const updated = await waitForGeocodedLocation(
@@ -403,6 +409,9 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Cordoba',
       state: 'Cordoba',
       country: 'Spain',
+      status: 'PENDING',
+      latitude: null,
+      longitude: null,
     });
 
     const updated = await waitForGeocodedLocation(
@@ -449,6 +458,9 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Toronto',
       state: 'Ontario',
       country: 'Canada',
+      status: 'PENDING',
+      latitude: null,
+      longitude: null,
     });
 
     const updated = await waitForGeocodedLocation(

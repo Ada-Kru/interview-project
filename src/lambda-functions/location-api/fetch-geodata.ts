@@ -8,6 +8,7 @@ const ddbClient = new DynamoDBClient({});
 const docClient = DynamoDBDocumentClient.from(ddbClient);
 const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 const USER_AGENT = 'Interview Project (https://github.com/Ada-Kru/interview-project)';
+const MAX_RECEIVE_COUNT = Number(process.env.FETCH_GEODATA_MAX_RECEIVE_COUNT ?? 5);
 
 export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const batchItemFailures: SQSBatchItemFailure[] = [];
@@ -50,7 +51,18 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
         (await geoResponse.json()) as { lat: string, lon: string }[];
 
       if (!results.length) {
-        throw new Error(`No geodata results found for ${id}`);
+        await docClient.send(
+          new UpdateCommand({
+            TableName: LOCATIONS_TABLE_NAME,
+            Key: { id: loc.id },
+            ...buildUpdateParams({
+              latitude: null,
+              longitude: null,
+              status: LocationCoordinatesStatus.NOT_FOUND
+            }),
+          })
+        );
+        continue;
       }
 
       const { lat, lon } = results[0];
@@ -72,6 +84,26 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
       );
     } catch (err) {
       console.error('Geocode failed', record.messageId, err);
+
+      // Last delivery attempt before SQS moves the message to the dead letter queue.
+      if (Number(record.attributes.ApproximateReceiveCount) >= MAX_RECEIVE_COUNT) {
+        try {
+          await docClient.send(
+            new UpdateCommand({
+              TableName: LOCATIONS_TABLE_NAME,
+              Key: { id: loc.id },
+              ...buildUpdateParams({
+                latitude: null,
+                longitude: null,
+                status: LocationCoordinatesStatus.ERROR
+              }),
+            })
+          );
+        } catch (updateErr) {
+          console.error('Failed to set ERROR status', record.messageId, updateErr);
+        }
+      }
+
       batchItemFailures.push({ itemIdentifier: record.messageId });
     }
   }
