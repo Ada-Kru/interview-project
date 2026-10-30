@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '@playwright/test';
 import { clearLocationsTable } from './helpers/locations-db';
 
-// Relative (no leading slash) so Playwright keeps the API_BASE_URL path prefix.
 const LOCATIONS_PATH = 'api/v1/locations';
 
 const GEODATA_TIMEOUT = 30_000;
@@ -483,5 +482,75 @@ test.describe('OpenStreetMap geocoding', () => {
       'updated Toronto location'
     );
     expectCoordinatesChanged(updated, initial, 'city/state/country update');
+  });
+
+  test('PATCH /api/v1/locations/:id persists new casing without refreshing coordinates', async ({
+    request,
+  }) => {
+    const { body: created } = await createLocation(request, {
+      city: 'Portland',
+      state: 'Oregon',
+      country: 'United States',
+    });
+
+    const initial = await waitForGeocodedLocation(
+      request,
+      created.id,
+      PORTLAND_OREGON_COORDINATES,
+      'Portland, Oregon, United States'
+    );
+
+    const patched = await patchLocation(request, created.id, {
+      city: 'PORTLAND',
+    });
+
+    expect(patched).toMatchObject({
+      id: created.id,
+      city: 'PORTLAND',
+      state: 'Oregon',
+      country: 'United States',
+      status: 'MATCHED',
+      latitude: initial.latitude,
+      longitude: initial.longitude,
+    });
+
+    const fetched = await getLocation(request, created.id);
+    expect(fetched).toMatchObject({
+      city: 'PORTLAND',
+      status: 'MATCHED',
+      latitude: initial.latitude,
+      longitude: initial.longitude,
+    });
+  });
+
+  test('PATCH /api/v1/locations/:id trims whitespace and does not refresh coordinates', async ({
+    request,
+  }) => {
+    const { body: created } = await createLocation(request, {
+      city: 'Portland',
+      state: 'Oregon',
+      country: 'United States',
+    });
+
+    const initial = await waitForGeocodedLocation(
+      request,
+      created.id,
+      PORTLAND_OREGON_COORDINATES,
+      'Portland, Oregon, United States'
+    );
+
+    const patched = await patchLocation(request, created.id, {
+      city: '  Portland  ',
+    });
+
+    expect(patched).toMatchObject({
+      id: created.id,
+      city: 'Portland',
+      state: 'Oregon',
+      country: 'United States',
+      status: 'MATCHED',
+      latitude: initial.latitude,
+      longitude: initial.longitude,
+    });
   });
 });
