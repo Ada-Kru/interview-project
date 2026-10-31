@@ -30,9 +30,9 @@ export class InterviewProjectStack extends cdk.Stack {
     );
 
     locationsTable.addGlobalSecondaryIndex({
-      indexName: 'IdxSortById',
+      indexName: 'IdxSortByCreatedAt',
       partitionKey: { name: 'gsiPartition', type: dynamodb.AttributeType.STRING },
-      sortKey: { name: 'id', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING },
       projectionType: dynamodb.ProjectionType.ALL, 
     });
 

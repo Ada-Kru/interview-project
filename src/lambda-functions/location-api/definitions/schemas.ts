@@ -39,6 +39,7 @@ const singleLocationResponseSchema = z.object({
   country: z.string(),
   latitude: z.number().nullable(),
   longitude: z.number().nullable(),
+  createdAt: z.string(),
 });
 
 export const listLocationsResponseSchema = z.object({

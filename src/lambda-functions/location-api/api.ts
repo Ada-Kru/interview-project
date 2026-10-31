@@ -51,13 +51,13 @@ router.get('/api/v1/locations', async ({ valid }) => {
   try {
     const commandParams: QueryCommandInput = {
       TableName: LOCATIONS_TABLE_NAME,
-      IndexName: "IdxSortById",
+      IndexName: "IdxSortByCreatedAt",
       KeyConditionExpression: "gsiPartition = :gsiPk",
       ExpressionAttributeValues: {
         ":gsiPk": "ALL_ITEMS"
       },
       Limit: limit,
-      ScanIndexForward: true
+      ScanIndexForward: false
     };
 
     if (exclusiveStartKey) {
