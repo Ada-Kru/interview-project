@@ -9,7 +9,8 @@
     "cdk": "cdk",
     "local-bootstrap": "lstk cdk bootstrap",
     "local-synth": "lstk cdk synth",
-    "local-deploy": "lstk cdk deploy"
+    "local-deploy": "lstk cdk deploy",
+    "demo:smoke": "node scripts/demo-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

@@ -9,7 +9,6 @@ cdk.out
 
 volume/
 
-package-lock.json
 yarn.lock
 
 dist/

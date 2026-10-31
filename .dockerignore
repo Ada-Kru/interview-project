@@ -1,0 +1,14 @@
+.git
+.gitignore
+node_modules
+cdk.out
+volume
+test-results
+playwright-report
+blob-report
+logs
+*.log
+.env
+.DS_Store
+.vscode
+.idea

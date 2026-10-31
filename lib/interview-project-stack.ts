@@ -111,7 +111,7 @@ export class InterviewProjectStack extends cdk.Stack {
     fetchGeodataQueue.grantSendMessages(locationsApiHandler);
     locationsTable.grantReadWriteData(fetchGeodataHandler);
 
-    new apiGateway.LambdaRestApi(
+    const locationsApi = new apiGateway.LambdaRestApi(
       this,
       'LocationsProxyApi',
       {
@@ -119,5 +119,15 @@ export class InterviewProjectStack extends cdk.Stack {
         proxy: true,
       },
     );
+
+    new cdk.CfnOutput(this, 'DemoApiId', {
+      value: locationsApi.restApiId,
+      description: 'REST API ID used by the Docker demo gateway',
+    });
+
+    new cdk.CfnOutput(this, 'DemoApiStage', {
+      value: locationsApi.deploymentStage.stageName,
+      description: 'API Gateway stage used by the Docker demo gateway',
+    });
   }
 }

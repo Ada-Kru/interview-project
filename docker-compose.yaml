@@ -1,15 +1,63 @@
-version: "3.8"
-
 services:
   localstack:
     container_name: localstack_main
     image: localstack/localstack:4.4.0
     ports:
-      - "127.0.0.1:4566:4566"            # LocalStack Gateway
-      - "127.0.0.1:4510-4559:4510-4559"  # External service port range
+      # Host port is configurable so the demo can run next to another LocalStack.
+      - "127.0.0.1:${LOCALSTACK_PORT:-4566}:4566"
     environment:
-      - DEBUG=1
+      - DEBUG=${LOCALSTACK_DEBUG:-0}
       - ENFORCE_IAM=1
     volumes:
-      - "${LOCALSTACK_VOLUME_DIR:-./volume}:/var/lib/localstack"
+      - localstack-data:/var/lib/localstack
+      # LocalStack uses the Docker socket to run the Lambda function containers.
       - "/var/run/docker.sock:/var/run/docker.sock"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - /opt/code/localstack/.venv/bin/localstack status services --format=json >/dev/null
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
+
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: interview-project-demo:local
+    init: true
+    ports:
+      - "127.0.0.1:${DEMO_PORT:-8080}:8080"
+    depends_on:
+      localstack:
+        condition: service_healthy
+    environment:
+      LOCALSTACK_ENDPOINT_URL: http://localstack:4566
+      AWS_ENDPOINT_URL: http://localstack:4566
+      AWS_ENDPOINT_URL_S3: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+      CDK_DEFAULT_ACCOUNT: "000000000000"
+      CDK_DEFAULT_REGION: us-east-1
+      CDK_CLI_TELEMETRY: "false"
+      CDK_S3_FORCE_PATH_STYLE: "1"
+      CI: "true"
+      DEMO_STATE_DIR: /tmp/demo
+      DEMO_API_PORT: "8080"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 300s
+    stop_grace_period: 10s
+
+volumes:
+  localstack-data:
