@@ -107,6 +107,10 @@ export class InterviewProjectStack extends cdk.Stack {
       },
     );
 
+    locationsTable.grantReadWriteData(locationsApiHandler);
+    fetchGeodataQueue.grantSendMessages(locationsApiHandler);
+    locationsTable.grantReadWriteData(fetchGeodataHandler);
+
     new apiGateway.LambdaRestApi(
       this,
       'LocationsProxyApi',
