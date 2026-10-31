@@ -1,4 +1,4 @@
-export enum LocationCoordinatesStatus {
+export enum LocationGeodataStatus {
   MATCHED = 'MATCHED',
   NOT_FOUND = 'NOT_FOUND',
   PENDING = 'PENDING',
@@ -14,7 +14,7 @@ export interface Location {
   latitude: number | null;
   longitude: number | null;
   createdAt: string;
-  status?: LocationCoordinatesStatus;
+  geodataStatus?: LocationGeodataStatus;
 };
 
 export interface LocationCreateData {

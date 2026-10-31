@@ -8,7 +8,6 @@ import {
 import { clearLocationsTable } from './helpers/locations-db';
 
 const LOCATIONS_PATH = 'api/v1/locations';
-
 const GEODATA_TIMEOUT = 30_000;
 const COORDINATE_TOLERANCE = 0.25;
 
@@ -24,7 +23,7 @@ type LocationRecord = LocationPayload & {
   latitude: number | null;
   longitude: number | null;
   createdAt: string;
-  status?: 'PENDING' | 'MATCHED' | 'NOT_FOUND' | 'ERROR';
+  geodataStatus?: 'PENDING' | 'MATCHED' | 'NOT_FOUND' | 'ERROR';
 };
 
 type ValidationIssue = {
@@ -226,7 +225,7 @@ async function waitForGeocodedLocation(
         latest = await getLocation(request, id);
 
         return (
-          latest.status === 'MATCHED' &&
+          latest.geodataStatus === 'MATCHED' &&
           isWithinTolerance(latest.latitude, expected.latitude) &&
           isWithinTolerance(latest.longitude, expected.longitude)
         );
@@ -330,7 +329,7 @@ test('POST /api/v1/locations creates a location', async ({ request }) => {
 
   expect(body).toMatchObject(payload);
   expect(body.createdAt).toEqual(expect.any(String));
-  expect(body.status).toBe('PENDING');
+  expect(body.geodataStatus).toBe('PENDING');
   expect(body.latitude).toBeNull();
   expect(body.longitude).toBeNull();
 });
@@ -429,7 +428,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Seattle',
       state: 'WA',
       country: 'United States',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
     });
     expectCoordinatesNear(
       geocoded,
@@ -462,7 +461,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Eugene',
       state: 'Oregon',
       country: 'United States',
-      status: 'PENDING',
+      geodataStatus: 'PENDING',
       latitude: null,
       longitude: null,
     });
@@ -479,7 +478,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Eugene',
       state: 'Oregon',
       country: 'United States',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
     });
     expectCoordinatesNear(
       updated,
@@ -513,7 +512,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Portland',
       state: 'Maine',
       country: 'United States',
-      status: 'PENDING',
+      geodataStatus: 'PENDING',
       latitude: null,
       longitude: null,
     });
@@ -530,7 +529,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Portland',
       state: 'Maine',
       country: 'United States',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
     });
     expectCoordinatesNear(
       updated,
@@ -564,7 +563,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Cordoba',
       state: 'Cordoba',
       country: 'Spain',
-      status: 'PENDING',
+      geodataStatus: 'PENDING',
       latitude: null,
       longitude: null,
     });
@@ -581,7 +580,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Cordoba',
       state: 'Cordoba',
       country: 'Spain',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
     });
     expectCoordinatesNear(
       updated,
@@ -613,7 +612,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Toronto',
       state: 'Ontario',
       country: 'Canada',
-      status: 'PENDING',
+      geodataStatus: 'PENDING',
       latitude: null,
       longitude: null,
     });
@@ -630,7 +629,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Toronto',
       state: 'Ontario',
       country: 'Canada',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
     });
     expectCoordinatesNear(
       updated,
@@ -665,7 +664,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'PORTLAND',
       state: 'Oregon',
       country: 'United States',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
       latitude: initial.latitude,
       longitude: initial.longitude,
     });
@@ -673,7 +672,7 @@ test.describe('OpenStreetMap geocoding', () => {
     const fetched = await getLocation(request, created.id);
     expect(fetched).toMatchObject({
       city: 'PORTLAND',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
       latitude: initial.latitude,
       longitude: initial.longitude,
     });
@@ -704,7 +703,7 @@ test.describe('OpenStreetMap geocoding', () => {
       city: 'Portland',
       state: 'Oregon',
       country: 'United States',
-      status: 'MATCHED',
+      geodataStatus: 'MATCHED',
       latitude: initial.latitude,
       longitude: initial.longitude,
     });

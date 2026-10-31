@@ -16,7 +16,7 @@ import {
   type QueryCommandInput,
   UpdateCommand
 } from '@aws-sdk/lib-dynamodb';
-import { LocationCoordinatesStatus } from './definitions/types';
+import { LocationGeodataStatus } from './definitions/types';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 
 
@@ -152,7 +152,7 @@ router.post('/api/v1/locations', async ({ valid }) => {
     country: data.country,
     latitude: null,
     longitude: null,
-    status: LocationCoordinatesStatus.PENDING,
+    geodataStatus: LocationGeodataStatus.PENDING,
     createdAt: new Date().toISOString(),
     gsiPartition: 'ALL_ITEMS',
   };
@@ -232,7 +232,7 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
                 ...body,
                 latitude: null,
                 longitude: null,
-                status: LocationCoordinatesStatus.PENDING,
+                geodataStatus: LocationGeodataStatus.PENDING,
               }
             : body
         ),

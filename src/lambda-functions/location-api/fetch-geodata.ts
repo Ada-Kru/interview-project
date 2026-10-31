@@ -1,7 +1,7 @@
 import { buildUpdateParams } from '../../helpers/dynamoDbUpdate';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { Location, LocationCoordinatesStatus } from './definitions/types';
+import { Location, LocationGeodataStatus } from './definitions/types';
 import { SQSBatchResponse, SQSEvent, SQSBatchItemFailure } from 'aws-lambda';
 
 const ddbClient = new DynamoDBClient({});
@@ -69,7 +69,7 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
             ...buildUpdateParams({
               latitude: null,
               longitude: null,
-              status: LocationCoordinatesStatus.NOT_FOUND
+              geodataStatus: LocationGeodataStatus.NOT_FOUND
             }),
           })
         );
@@ -89,7 +89,7 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
           ...buildUpdateParams({
             latitude: parseFloat(lat),
             longitude: parseFloat(lon),
-            status: LocationCoordinatesStatus.MATCHED
+            geodataStatus: LocationGeodataStatus.MATCHED
           }),
         })
       );
@@ -109,7 +109,7 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
               ...buildUpdateParams({
                 latitude: null,
                 longitude: null,
-                status: LocationCoordinatesStatus.ERROR
+                geodataStatus: LocationGeodataStatus.ERROR
               }),
             })
           );
