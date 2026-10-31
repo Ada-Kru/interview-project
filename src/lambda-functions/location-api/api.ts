@@ -86,7 +86,10 @@ router.get('/api/v1/locations', async ({ valid }) => {
     };
   }
   catch (err) {
-    console.error('Error fetching locations: ', err);
+    console.error({
+      message: 'Error fetching locations',
+      data: { error: err }
+    });
     return {
       statusCode: 500,
       body: { error: 'Failed to fetch locations' },
@@ -126,7 +129,10 @@ router.get('/api/v1/locations/:id', async ({ params }) => {
     };
   }
   catch (err) {
-    console.error('Error creating location: ', err);
+    console.error({
+      message: 'Error fetching location',
+      data: { error: err }
+    });
     return {
       statusCode: 500,
       body: { error: 'Failed to create location' },
@@ -172,7 +178,10 @@ router.post('/api/v1/locations', async ({ valid }) => {
     };
   }
   catch (err) {
-    console.error('Error writing to database: ', err);
+    console.error({
+      message: 'Error writing to database',
+      data: { error: err }
+    });
      return {
       statusCode: 500,
       body: { error: 'Failed to create location' },
@@ -246,7 +255,10 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
     };
   }
   catch (err) {
-    console.error('Error patching location: ', err);
+    console.error({
+      message: 'Error patching location',
+      data: { error: err }
+    });
      return {
       statusCode: 500,
       body: { error: 'Failed to update location' },

@@ -94,7 +94,10 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
         })
       );
     } catch (err) {
-      console.error('Geocode failed', record.messageId, err);
+      console.error({
+        message: 'Geocode failed',
+        data: { messageId: record.messageId, error: err }
+      });
 
       // Last delivery attempt before SQS moves the message to the dead letter queue.
       if (Number(record.attributes.ApproximateReceiveCount) >= MAX_RECEIVE_COUNT) {
@@ -111,7 +114,10 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
             })
           );
         } catch (updateErr) {
-          console.error('Failed to set ERROR status', record.messageId, updateErr);
+          console.error({
+            message: 'Failed to set ERROR status',
+            data: { messageId: record.messageId, error: updateErr }
+          });
         }
       }
 
