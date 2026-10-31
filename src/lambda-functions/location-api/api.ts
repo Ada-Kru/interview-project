@@ -135,7 +135,7 @@ router.get('/api/v1/locations/:id', async ({ params }) => {
     });
     return {
       statusCode: 500,
-      body: { error: 'Failed to create location' },
+      body: { error: 'Failed to fetch location' },
     };
   }
 });
@@ -164,18 +164,6 @@ router.post('/api/v1/locations', async ({ valid }) => {
         Item: newLocation,
       })
     );
-
-    await sqsClient.send(
-      new SendMessageCommand({
-        QueueUrl: LOCATIONS_GEODATA_QUEUE_URL,
-        MessageBody: JSON.stringify({ id: newLocation.id }),
-      })
-    );
-
-    return {
-      statusCode: 201,
-      body: newLocation
-    };
   }
   catch (err) {
     console.error({
@@ -187,6 +175,18 @@ router.post('/api/v1/locations', async ({ valid }) => {
       body: { error: 'Failed to create location' },
      };
   }
+
+  await sqsClient.send(
+    new SendMessageCommand({
+      QueueUrl: LOCATIONS_GEODATA_QUEUE_URL,
+      MessageBody: JSON.stringify({ id: newLocation.id }),
+    })
+  );
+
+  return {
+    statusCode: 201,
+    body: newLocation
+  };
 }, {
   validation: {
     req: {
