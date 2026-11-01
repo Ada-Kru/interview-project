@@ -8,15 +8,13 @@ services:
       # MiniStack's IAM enforcement is incompatible with the HTTP-only CDK
       # bootstrap bucket policy, so it is opt-in via MINISTACK_AUTH.
       - AUTH=${MINISTACK_AUTH:-false}
-      - PERSIST_STATE=1
-      - STATE_DIR=/data/ministack-state
-      - S3_PERSIST=1
-      - S3_DATA_DIR=/data/s3
+      # State is intentionally not persisted: MiniStack only writes service
+      # state on a graceful shutdown while S3 data is written continuously, so
+      # a restart can leave buckets without their CloudFormation stacks and
+      # break `cdk bootstrap`. Each run therefore starts from a clean emulator.
       - MINISTACK_REGION=us-east-1
       - MINISTACK_ACCOUNT_ID=000000000000
       - LOG_LEVEL=INFO
-    volumes:
-      - ministack-data:/data
     healthcheck:
       test:
         - CMD
@@ -64,6 +62,3 @@ services:
       retries: 30
       start_period: 300s
     stop_grace_period: 10s
-
-volumes:
-  ministack-data:

@@ -9,8 +9,7 @@
     "cdk": "cdk",
     "local-bootstrap": "node scripts/local-cdk.mjs bootstrap",
     "local-synth": "node scripts/local-cdk.mjs synth",
-    "local-deploy": "node scripts/local-cdk.mjs deploy --require-approval never",
-    "demo:smoke": "node scripts/demo-smoke.mjs"
+    "local-deploy": "node scripts/local-cdk.mjs deploy --require-approval never"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

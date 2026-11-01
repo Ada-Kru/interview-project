@@ -13,6 +13,9 @@ Requires Docker with Compose v2. The demo runs against
 docker compose up --build --wait
 ```
 
+The emulator state is not persisted between runs: each `up` bootstraps and
+deploys into a clean MiniStack instance.
+
 The API is then available at `http://localhost:8080/api/v1/locations`.
 
 GET /locations         Get a list of all locations
@@ -21,8 +24,7 @@ POST /locations        Create a new location
 PATCH /locations/{id}  Update a location
 
 ```bash
-docker compose exec demo npm run demo:smoke   # smoke test
-docker compose down                           # stop (add -v to reset state)
+docker compose down   # stop
 ```
 
 ## Local development
