@@ -1,25 +1,32 @@
 services:
-  localstack:
-    container_name: localstack_main
-    image: localstack/localstack:4.4.0
+  ministack:
+    container_name: ministack_main
+    image: ministackorg/ministack:1.5.35
     ports:
-      # Host port is configurable so the demo can run next to another LocalStack.
-      - "127.0.0.1:${LOCALSTACK_PORT:-4566}:4566"
+      - "127.0.0.1:${MINISTACK_PORT:-4566}:4566"
     environment:
-      - DEBUG=${LOCALSTACK_DEBUG:-0}
-      - ENFORCE_IAM=1
+      # MiniStack's IAM enforcement is incompatible with the HTTP-only CDK
+      # bootstrap bucket policy, so it is opt-in via MINISTACK_AUTH.
+      - AUTH=${MINISTACK_AUTH:-false}
+      - PERSIST_STATE=1
+      - STATE_DIR=/data/ministack-state
+      - S3_PERSIST=1
+      - S3_DATA_DIR=/data/s3
+      - MINISTACK_REGION=us-east-1
+      - MINISTACK_ACCOUNT_ID=000000000000
+      - LOG_LEVEL=INFO
     volumes:
-      - localstack-data:/var/lib/localstack
-      # LocalStack uses the Docker socket to run the Lambda function containers.
-      - "/var/run/docker.sock:/var/run/docker.sock"
+      - ministack-data:/data
     healthcheck:
       test:
-        - CMD-SHELL
-        - /opt/code/localstack/.venv/bin/localstack status services --format=json >/dev/null
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:4566/_ministack/health')"
       interval: 10s
-      timeout: 10s
+      timeout: 5s
       retries: 30
-      start_period: 30s
+      start_period: 10s
 
   demo:
     build:
@@ -30,12 +37,11 @@ services:
     ports:
       - "127.0.0.1:${DEMO_PORT:-8080}:8080"
     depends_on:
-      localstack:
+      ministack:
         condition: service_healthy
     environment:
-      LOCALSTACK_ENDPOINT_URL: http://localstack:4566
-      AWS_ENDPOINT_URL: http://localstack:4566
-      AWS_ENDPOINT_URL_S3: http://localstack:4566
+      AWS_ENDPOINT_URL: http://ministack:4566
+      AWS_ENDPOINT_URL_S3: http://ministack:4566
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: us-east-1
@@ -60,4 +66,4 @@ services:
     stop_grace_period: 10s
 
 volumes:
-  localstack-data:
+  ministack-data:

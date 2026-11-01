@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 
 const endpoint = (
-  process.env.LOCALSTACK_ENDPOINT_URL ?? 'http://localstack:4566'
+  process.env.AWS_ENDPOINT_URL ?? 'http://localhost:4566'
 ).replace(/\/+$/, '');
 const outputsFile =
   process.env.DEMO_OUTPUTS_FILE ??

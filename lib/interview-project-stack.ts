@@ -65,7 +65,9 @@ export class InterviewProjectStack extends cdk.Stack {
         ),
         environment: {
           LOCATIONS_TABLE_NAME: locationsTable.tableName,
-          FETCH_GEODATA_MAX_RECEIVE_COUNT: String(FETCH_GEODATA_MAX_RECEIVE_COUNT),
+          FETCH_GEODATA_MAX_RECEIVE_COUNT: String(
+            FETCH_GEODATA_MAX_RECEIVE_COUNT
+          ),
         },
         handler: 'index.handler',
         timeout: Duration.seconds(30),
@@ -73,6 +75,8 @@ export class InterviewProjectStack extends cdk.Stack {
         bundling: {
           minify: true,
           sourceMap: true,
+          // MiniStack's local Lambda executor does not ship the AWS SDK by default
+          bundleAwsSDK: true,
         },
       }
     );
@@ -93,7 +97,10 @@ export class InterviewProjectStack extends cdk.Stack {
       'LocationsApiHandler',
       {
         runtime: lambda.Runtime.NODEJS_22_X,
-        entry: path.join(__dirname, '../src/lambda-functions/location-api/api.ts'),
+        entry: path.join(
+          __dirname,
+          '../src/lambda-functions/location-api/api.ts'
+        ),
         environment: {
           LOCATIONS_TABLE_NAME: locationsTable.tableName,
           LOCATIONS_GEODATA_QUEUE_URL: fetchGeodataQueue.queueUrl
@@ -103,6 +110,8 @@ export class InterviewProjectStack extends cdk.Stack {
         bundling: {
           minify: true,
           sourceMap: true,
+          // MiniStack's local Lambda executor does not ship the AWS SDK by default
+          bundleAwsSDK: true,
         },
       },
     );

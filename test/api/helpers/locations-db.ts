@@ -7,7 +7,7 @@ import {
 
 const endpoint =
   process.env.DYNAMODB_ENDPOINT ??
-  process.env.LOCALSTACK_ENDPOINT_URL ??
+  process.env.AWS_ENDPOINT_URL ??
   'http://localhost:4566';
 const region =
   process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1';

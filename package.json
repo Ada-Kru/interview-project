@@ -7,9 +7,9 @@
     "test": "jest",
     "test:api": "tsx scripts/run-api-tests.ts",
     "cdk": "cdk",
-    "local-bootstrap": "lstk cdk bootstrap",
-    "local-synth": "lstk cdk synth",
-    "local-deploy": "lstk cdk deploy",
+    "local-bootstrap": "node scripts/local-cdk.mjs bootstrap",
+    "local-synth": "node scripts/local-cdk.mjs synth",
+    "local-deploy": "node scripts/local-cdk.mjs deploy --require-approval never",
     "demo:smoke": "node scripts/demo-smoke.mjs"
   },
   "devDependencies": {
@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@aws-lambda-powertools/event-handler": "^2.36.0",
+    "@aws-sdk/client-api-gateway": "^3.1159.0",
     "@aws-sdk/client-dynamodb": "^3.1159.0",
     "@aws-sdk/client-sqs": "^3.1160.0",
     "@aws-sdk/lib-dynamodb": "^3.1159.0",
