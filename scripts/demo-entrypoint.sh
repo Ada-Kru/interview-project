@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export LOCALSTACK_ENDPOINT_URL="${LOCALSTACK_ENDPOINT_URL:-http://localstack:4566}"
-export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-$LOCALSTACK_ENDPOINT_URL}"
-export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$LOCALSTACK_ENDPOINT_URL}"
+export AWS_ENDPOINT_URL="${AWS_ENDPOINT_URL:-http://localhost:4566}"
+export AWS_ENDPOINT_URL_S3="${AWS_ENDPOINT_URL_S3:-$AWS_ENDPOINT_URL}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_REGION="${AWS_REGION:-us-east-1}"
@@ -19,10 +18,10 @@ export DEMO_OUTPUTS_FILE="${DEMO_OUTPUTS_FILE:-$DEMO_STATE_DIR/outputs.json}"
 
 mkdir -p "$DEMO_STATE_DIR"
 
-echo "Waiting for LocalStack at ${LOCALSTACK_ENDPOINT_URL}..."
+echo "Waiting for MiniStack at ${AWS_ENDPOINT_URL}..."
 node scripts/demo-wait.mjs
 
-echo "Bootstrapping the CDK environment in LocalStack..."
+echo "Bootstrapping the CDK environment in MiniStack..."
 npx --no-install cdk bootstrap "aws://${CDK_DEFAULT_ACCOUNT}/${CDK_DEFAULT_REGION}" --no-color
 
 echo "Deploying InterviewProjectStack..."

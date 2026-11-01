@@ -6,7 +6,8 @@ The `cdk.json` file tells the CDK Toolkit how to execute your app.
 
 ## Run the demo in Docker
 
-Requires Docker with Compose v2.
+Requires Docker with Compose v2. The demo runs against
+[MiniStack](https://ministack.org/), a local AWS emulator.
 
 ```bash
 docker compose up --build --wait
@@ -24,13 +25,30 @@ docker compose exec demo npm run demo:smoke   # smoke test
 docker compose down                           # stop (add -v to reset state)
 ```
 
+## Local development
+
+Start the emulator, bootstrap and deploy the stack, then run the API tests:
+
+```bash
+docker compose up -d ministack
+npm run local-bootstrap
+npm run local-deploy
+npm run test:api
+```
+
+MiniStack IAM enforcement is disabled by default. The CDK bootstrap staging
+bucket denies non-TLS requests, so enabling `MINISTACK_AUTH=true` requires
+serving MiniStack over HTTPS.
+
 ## Useful commands
 
-* `npm run build`   type-check the project
-* `npm run watch`   watch for changes and type-check
+* `npm run build`          type-check the project
+* `npm run watch`          watch for changes and type-check
+* `npm run local-bootstrap` bootstrap the CDK environment in MiniStack
+* `npm run local-synth`    synthesize the stack against MiniStack
+* `npm run local-deploy`   deploy the stack to MiniStack
+* `npm run test:api`       run the Playwright API tests against MiniStack
 
 * `npx cdk deploy`  deploy this stack to your default AWS account/region
 * `npx cdk diff`    compare deployed stack with current state
 * `npx cdk synth`   emits the synthesized CloudFormation template
-
-* `npm run test:api` run the Playwright API tests against LocalStack
