@@ -1,17 +1,30 @@
-// import * as cdk from 'aws-cdk-lib/core';
-// import { Template } from 'aws-cdk-lib/assertions';
-// import * as InterviewProject from '../lib/interview-project-stack';
+import * as cdk from 'aws-cdk-lib/core';
+import { Template } from 'aws-cdk-lib/assertions';
+import { InterviewProjectStack } from '../lib/interview-project-stack';
 
-// example test. To run these tests, uncomment this file along with the
-// example resource in lib/interview-project-stack.ts
-test('SQS Queue Created', () => {
-//   const app = new cdk.App();
-//     // WHEN
-//   const stack = new InterviewProject.InterviewProjectStack(app, 'MyTestStack');
-//     // THEN
-//   const template = Template.fromStack(stack);
+describe('InterviewProjectStack', () => {
+  let template: Template;
 
-//   template.hasResourceProperties('AWS::SQS::Queue', {
-//     VisibilityTimeout: 300
-//   });
+  beforeAll(() => {
+    const app = new cdk.App();
+    const stack = new InterviewProjectStack(app, 'TestStack');
+    template = Template.fromStack(stack);
+  });
+
+  test('creates the locations table', () => {
+    template.resourceCountIs('AWS::DynamoDB::GlobalTable', 1);
+    template.hasResourceProperties('AWS::DynamoDB::GlobalTable', {
+      TableName: 'Locations',
+    });
+  });
+
+  test('creates the geodata queue with a five-minute visibility timeout', () => {
+    template.hasResourceProperties('AWS::SQS::Queue', {
+      VisibilityTimeout: 300,
+    });
+  });
+
+  test('creates both lambda functions', () => {
+    template.resourceCountIs('AWS::Lambda::Function', 2);
+  });
 });
