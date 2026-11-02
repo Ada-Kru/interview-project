@@ -1,33 +1,57 @@
-import { buildUpdateParams } from '../../helpers/dynamoDbUpdate';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
-import { Location, LocationGeodataStatus } from './definitions/types';
+import { LocationGeodataStatus } from './definitions/types';
+import {
+  getLocation,
+  updateLocationGeodata,
+} from '../../database/locations';
 import { SQSBatchResponse, SQSEvent, SQSBatchItemFailure } from 'aws-lambda';
 
-const ddbClient = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(ddbClient);
-const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 const USER_AGENT = 'Interview Project (https://github.com/Ada-Kru/interview-project)';
 const MAX_RECEIVE_COUNT = Number(process.env.FETCH_GEODATA_MAX_RECEIVE_COUNT ?? 5);
 
-// Nominatim (OpenStreetMap) allows at most 1 request per second per application.
+// OpenStreetMap allows 1 request per second
 const OSM_REQUEST_INTERVAL_MS = 1000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const parseLocationId = (body: string): number | undefined => {
+  try {
+    const parsed = JSON.parse(body) as { id?: unknown };
+
+    if (
+      typeof parsed.id !== 'number' ||
+      !Number.isSafeInteger(parsed.id) ||
+      parsed.id <= 0
+    ) {
+      return undefined;
+    }
+
+    return parsed.id;
+  } catch {
+    return undefined;
+  }
+};
+
 export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
   const batchItemFailures: SQSBatchItemFailure[] = [];
   for (const record of event.Records) {
-    const { id } = JSON.parse(record.body) as { id: string };
-    const loc = (await docClient.send(
-      new GetCommand({
-        TableName: LOCATIONS_TABLE_NAME,
-        Key: { id }
-      })
-    )).Item as Location | undefined;
+    const id = parseLocationId(record.body);
+
+    if (id === undefined) {
+      console.error({
+        message: 'Invalid geodata message',
+        data: { messageId: record.messageId, body: record.body },
+      });
+      continue;
+    }
+
+    const loc = await getLocation(id);
 
     if (!loc) {
-      throw new Error(`Location with id ${id} not found`);
+      console.warn({
+        message: 'Location not found in database, skipping message',
+        data: { id, messageId: record.messageId },
+      });
+      continue;
     }
 
     try {
@@ -62,17 +86,11 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
         (await geoResponse.json()) as { lat: string, lon: string }[];
 
       if (!results.length) {
-        await docClient.send(
-          new UpdateCommand({
-            TableName: LOCATIONS_TABLE_NAME,
-            Key: { id: loc.id },
-            ...buildUpdateParams({
-              latitude: null,
-              longitude: null,
-              geodataStatus: LocationGeodataStatus.NOT_FOUND
-            }),
-          })
-        );
+        await updateLocationGeodata(loc.id, {
+          latitude: null,
+          longitude: null,
+          geodataStatus: LocationGeodataStatus.NOT_FOUND,
+        });
         continue;
       }
 
@@ -82,17 +100,11 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
         throw new Error(`Invalid latitude and/or longitude ${lat} ${lon}`);
       }
 
-      await docClient.send(
-        new UpdateCommand({
-          TableName: LOCATIONS_TABLE_NAME,
-          Key: { id: loc.id },
-          ...buildUpdateParams({
-            latitude: parseFloat(lat),
-            longitude: parseFloat(lon),
-            geodataStatus: LocationGeodataStatus.MATCHED
-          }),
-        })
-      );
+      await updateLocationGeodata(loc.id, {
+        latitude: parseFloat(lat),
+        longitude: parseFloat(lon),
+        geodataStatus: LocationGeodataStatus.MATCHED,
+      });
     } catch (err) {
       console.error({
         message: 'Geocode failed',
@@ -102,17 +114,11 @@ export const handler = async (event: SQSEvent): Promise<SQSBatchResponse> => {
       // Last delivery attempt before SQS moves the message to the dead letter queue.
       if (Number(record.attributes.ApproximateReceiveCount) >= MAX_RECEIVE_COUNT) {
         try {
-          await docClient.send(
-            new UpdateCommand({
-              TableName: LOCATIONS_TABLE_NAME,
-              Key: { id: loc.id },
-              ...buildUpdateParams({
-                latitude: null,
-                longitude: null,
-                geodataStatus: LocationGeodataStatus.ERROR
-              }),
-            })
-          );
+          await updateLocationGeodata(loc.id, {
+            latitude: null,
+            longitude: null,
+            geodataStatus: LocationGeodataStatus.ERROR,
+          });
         } catch (updateErr) {
           console.error({
             message: 'Failed to set ERROR status',

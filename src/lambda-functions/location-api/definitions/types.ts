@@ -6,7 +6,9 @@ export enum LocationGeodataStatus {
 }
 
 export interface Location {
-  id: string;
+  [key: string]: string | number | null | undefined;
+
+  id: number;
   name: string;
   city: string;
   state: string;

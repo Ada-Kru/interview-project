@@ -23,16 +23,12 @@ export const updateLocationSchema = z.object({
 });
 
 export const listLocationsSchema = z.object({
-  limit: z
-    .string()
-    .optional()
-    .transform((val) => (val ? parseInt(val, 10) : 100))
-    .pipe(z.number().int().positive().max(1000)),
-  nextToken: z.string().optional()
+  page: z.coerce.number().int().positive().default(1),
+  pageSize: z.coerce.number().int().positive().max(1000).default(100),
 });
 
 const singleLocationResponseSchema = z.object({
-  id: z.string(),
+  id: z.number().int().positive(),
   name: z.string(),
   city: z.string(),
   state: z.string(),
@@ -44,5 +40,8 @@ const singleLocationResponseSchema = z.object({
 
 export const listLocationsResponseSchema = z.object({
   items: z.array(singleLocationResponseSchema),
-  nextToken: z.string().nullable()
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+  total: z.number().int().nonnegative(),
+  totalPages: z.number().int().nonnegative(),
 });

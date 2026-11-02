@@ -1,30 +1,24 @@
 import { Router } from '@aws-lambda-powertools/event-handler/http';
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
-import { buildUpdateParams } from '../../helpers/dynamoDbUpdate';
 import {
   createLocationSchema,
   listLocationsResponseSchema,
   listLocationsSchema,
   updateLocationSchema
 } from './definitions/schemas';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import {
-  DynamoDBDocumentClient,
-  GetCommand,
-  PutCommand,
-  QueryCommand,
-  type QueryCommandInput,
-  UpdateCommand
-} from '@aws-sdk/lib-dynamodb';
 import { Location, LocationGeodataStatus } from './definitions/types';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
+import {
+  createLocation,
+  getLocation,
+  listLocations,
+  updateLocation,
+  type LocationUpdate,
+} from '../../database/locations';
 
 
 const router = new Router();
-const ddbClient = new DynamoDBClient({});
-const docClient = DynamoDBDocumentClient.from(ddbClient);
 const sqsClient = new SQSClient({});
-const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 const LOCATIONS_GEODATA_QUEUE_URL = process.env.LOCATIONS_GEODATA_QUEUE_URL;
 const LOCATION_FIELDS_TRIGGER_GEOCODE = [
   'city',
@@ -32,57 +26,32 @@ const LOCATION_FIELDS_TRIGGER_GEOCODE = [
   'country'
 ] as const satisfies ReadonlyArray<keyof Location>;
 
+const parsePathIntId = (value: string): number | undefined => {
+  if (!/^\d+$/.test(value)) {
+    return undefined;
+  }
+
+  const id = Number(value);
+  return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+};
+
 const normalizePlacePart = (value: string) =>
   value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
 
 router.get('/api/v1/locations', async ({ valid }) => {
 
-  const { limit, nextToken } = valid.req.query;
-
-  let exclusiveStartKey = undefined;
-  if (nextToken) {
-    try {
-      exclusiveStartKey = JSON.parse(
-        Buffer.from(nextToken, 'base64').toString('utf-8')
-      );
-    } catch (err) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: 'Invalid "next" pagination token' }),
-      };
-    }
-  }
+  const { page, pageSize } = valid.req.query;
 
   try {
-    const commandParams: QueryCommandInput = {
-      TableName: LOCATIONS_TABLE_NAME,
-      IndexName: "IdxSortByCreatedAt",
-      KeyConditionExpression: "gsiPartition = :gsiPk",
-      ExpressionAttributeValues: {
-        ":gsiPk": "ALL_ITEMS"
-      },
-      Limit: limit,
-      ScanIndexForward: false
-    };
-
-    if (exclusiveStartKey) {
-      commandParams.ExclusiveStartKey = exclusiveStartKey;
-    }
-
-    const allLocations = await docClient.send(
-      new QueryCommand(commandParams)
-    );
-
-    let newNextToken = null;
-    if (allLocations.LastEvaluatedKey) {
-      newNextToken = Buffer.from(
-        JSON.stringify(allLocations.LastEvaluatedKey)
-      ).toString('base64');
-    }
+    const { items, total } = await listLocations(page, pageSize);
+    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize);
 
     const validatedResponseBody = listLocationsResponseSchema.parse({
-      items: allLocations.Items ?? [],
-      nextToken: newNextToken
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages,
     });
 
     return {
@@ -111,15 +80,17 @@ router.get('/api/v1/locations', async ({ valid }) => {
 
 router.get('/api/v1/locations/:id', async ({ params }) => {
 
-  const { id } = params;
+  const id = parsePathIntId(params.id);
+
+  if (id === undefined) {
+    return {
+      statusCode: 404,
+      body: { error: 'Location not found' },
+    };
+  }
 
   try {
-    const matchedLocation = (await docClient.send(
-      new GetCommand({
-        TableName: LOCATIONS_TABLE_NAME,
-        Key: { id }
-      })
-    )).Item;
+    const matchedLocation = await getLocation(id);
 
     if (!matchedLocation) {
       return {
@@ -149,36 +120,19 @@ router.post('/api/v1/locations', async ({ valid }) => {
 
   const data = valid.req.body;
 
-  const newLocation = {
-    id: crypto.randomUUID(),
-    name: data.name,
-    city: data.city,
-    state: data.state,
-    country: data.country,
-    latitude: null,
-    longitude: null,
-    geodataStatus: LocationGeodataStatus.PENDING,
-    createdAt: new Date().toISOString(),
-    gsiPartition: 'ALL_ITEMS',
-  };
-
+  let newLocation: Location;
   try {
-    await docClient.send(
-      new PutCommand({
-        TableName: LOCATIONS_TABLE_NAME,
-        Item: newLocation,
-      })
-    );
+    newLocation = await createLocation(data);
   }
   catch (err) {
     console.error({
       message: 'Error writing to database',
       data: { error: err }
     });
-     return {
+    return {
       statusCode: 500,
       body: { error: 'Failed to create location' },
-     };
+    };
   }
 
   await sqsClient.send(
@@ -203,16 +157,18 @@ router.post('/api/v1/locations', async ({ valid }) => {
 
 router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
 
-  const { id } = params;
+  const id = parsePathIntId(params.id);
   const body = valid.req.body;
 
+  if (id === undefined) {
+    return {
+      statusCode: 404,
+      body: { error: 'Location not found' },
+    };
+  }
+
   try {
-    const matchedLocation = (await docClient.send(
-      new GetCommand({
-        TableName: LOCATIONS_TABLE_NAME,
-        Key: { id }
-      })
-    )).Item;
+    const matchedLocation = await getLocation(id);
 
     if (!matchedLocation) {
       return {
@@ -224,26 +180,29 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
     const locationChanged = LOCATION_FIELDS_TRIGGER_GEOCODE.some(
       (field) =>
         body[field] !== undefined &&
-        normalizePlacePart(body[field]) !== normalizePlacePart(matchedLocation[field] ?? '')
+        (
+          normalizePlacePart(body[field]) !==
+          normalizePlacePart(matchedLocation[field] ?? '')
+        )
     );
 
-    const patchResult = await docClient.send(
-      new UpdateCommand({
-        TableName: LOCATIONS_TABLE_NAME,
-        Key: { id },
-        ...buildUpdateParams(
-          locationChanged
-            ? {
-                ...body,
-                latitude: null,
-                longitude: null,
-                geodataStatus: LocationGeodataStatus.PENDING,
-              }
-            : body
-        ),
-        ReturnValues: 'ALL_NEW'
-      })
-    );
+    const patch: LocationUpdate = locationChanged
+      ? {
+          ...body,
+          latitude: null,
+          longitude: null,
+          geodataStatus: LocationGeodataStatus.PENDING,
+        }
+      : body;
+
+    const updatedLocation = await updateLocation(id, patch);
+
+    if (!updatedLocation) {
+      return {
+        statusCode: 404,
+        body: { error: 'Location not found' },
+      };
+    }
 
     if (locationChanged) {
       await sqsClient.send(
@@ -256,7 +215,7 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
 
     return {
       statusCode: 200,
-      body: patchResult.Attributes,
+      body: updatedLocation,
     };
   }
   catch (err) {
@@ -264,10 +223,10 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
       message: 'Error patching location',
       data: { error: err }
     });
-     return {
+    return {
       statusCode: 500,
       body: { error: 'Failed to update location' },
-     };
+    };
   }
 }, {
   validation: {
