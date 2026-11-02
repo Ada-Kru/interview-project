@@ -96,25 +96,39 @@ describe('updateLocationSchema', () => {
 });
 
 describe('listLocationsSchema', () => {
-  it('defaults limit to 100', () => {
-    expect(listLocationsSchema.parse({})).toMatchObject({ limit: 100 });
-  });
-
-  it('parses a query-string limit', () => {
-    expect(listLocationsSchema.parse({ limit: '25' })).toMatchObject({
-      limit: 25,
+  it('defaults page to 1 and pageSize to 100', () => {
+    expect(listLocationsSchema.parse({})).toMatchObject({
+      page: 1,
+      pageSize: 100,
     });
   });
 
-  it('rejects a non-numeric limit', () => {
-    expect(listLocationsSchema.safeParse({ limit: 'abc' }).success).toBe(false);
+  it('parses query-string pagination parameters', () => {
+    expect(
+      listLocationsSchema.parse({ page: '2', pageSize: '25' }),
+    ).toMatchObject({
+      page: 2,
+      pageSize: 25,
+    });
   });
 
-  it('rejects a non-positive limit', () => {
-    expect(listLocationsSchema.safeParse({ limit: '0' }).success).toBe(false);
+  it('rejects a non-numeric page', () => {
+    expect(listLocationsSchema.safeParse({ page: 'abc' }).success).toBe(false);
   });
 
-  it('rejects a limit above the maximum', () => {
-    expect(listLocationsSchema.safeParse({ limit: '1001' }).success).toBe(false);
+  it('rejects a non-numeric pageSize', () => {
+    expect(listLocationsSchema.safeParse({ pageSize: 'abc' }).success).toBe(false);
+  });
+
+  it('rejects a non-positive page', () => {
+    expect(listLocationsSchema.safeParse({ page: '0' }).success).toBe(false);
+  });
+
+  it('rejects a non-positive pageSize', () => {
+    expect(listLocationsSchema.safeParse({ pageSize: '0' }).success).toBe(false);
+  });
+
+  it('rejects a pageSize above the maximum', () => {
+    expect(listLocationsSchema.safeParse({ pageSize: '1001' }).success).toBe(false);
   });
 });

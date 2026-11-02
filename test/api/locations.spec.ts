@@ -19,11 +19,19 @@ type LocationPayload = {
 };
 
 type LocationRecord = LocationPayload & {
-  id: string;
+  id: number;
   latitude: number | null;
   longitude: number | null;
   createdAt: string;
   geodataStatus?: 'PENDING' | 'MATCHED' | 'NOT_FOUND' | 'ERROR';
+};
+
+type LocationListResponse = {
+  items: LocationRecord[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 };
 
 type ValidationIssue = {
@@ -126,14 +134,14 @@ async function createLocation(
   expect(response.status()).toBe(201);
   const body = (await response.json()) as LocationRecord & Record<string, unknown>;
   expect(body).toMatchObject(payload);
-  expect(body.id).toEqual(expect.any(String));
+  expect(body.id).toEqual(expect.any(Number));
 
   return { payload, body };
 }
 
 async function getLocation(
   request: APIRequestContext,
-  id: string
+  id: number
 ): Promise<LocationRecord> {
   const response = await request.get(`${LOCATIONS_PATH}/${id}`);
 
@@ -143,7 +151,7 @@ async function getLocation(
 
 async function patchLocation(
   request: APIRequestContext,
-  id: string,
+  id: number,
   patch: Partial<LocationPayload>
 ): Promise<LocationRecord> {
   const response = await request.patch(`${LOCATIONS_PATH}/${id}`, { data: patch });
@@ -213,7 +221,7 @@ function isWithinTolerance(
 
 async function waitForGeocodedLocation(
   request: APIRequestContext,
-  id: string,
+  id: number,
   expected: Coordinates,
   label: string
 ): Promise<LocationRecord> {
@@ -278,26 +286,16 @@ function expectCoordinatesChanged(
 
 async function listAllLocations(request: APIRequestContext): Promise<LocationRecord[]> {
   const items: LocationRecord[] = [];
-  let nextToken: string | undefined;
+  const pageSize = 100;
 
-  for (let page = 0; page < 100; page++) {
-    const response = nextToken
-      ? await request.get(LOCATIONS_PATH, { params: { nextToken } })
-      : await request.get(LOCATIONS_PATH);
-
-    expect(response.status()).toBe(200);
-    const body = (await response.json()) as {
-      items: LocationRecord[];
-      nextToken: string | null;
-    };
+  for (let page = 1; page <= 100; page++) {
+    const body = await listLocationsPage(request, { page, pageSize });
 
     items.push(...body.items);
 
-    if (!body.nextToken) {
+    if (page >= body.totalPages || body.items.length === 0) {
       return items;
     }
-
-    nextToken = body.nextToken;
   }
 
   throw new Error('Location pagination did not terminate');
@@ -305,15 +303,12 @@ async function listAllLocations(request: APIRequestContext): Promise<LocationRec
 
 async function listLocationsPage(
   request: APIRequestContext,
-  params: { limit?: number; nextToken?: string } = {}
-): Promise<{ items: LocationRecord[]; nextToken: string | null }> {
+  params: { page?: number; pageSize?: number } = {}
+): Promise<LocationListResponse> {
   const response = await request.get(LOCATIONS_PATH, { params });
 
   expect(response.status()).toBe(200);
-  return (await response.json()) as {
-    items: LocationRecord[];
-    nextToken: string | null;
-  };
+  return (await response.json()) as LocationListResponse;
 }
 
 test.beforeEach(async () => {
@@ -364,18 +359,26 @@ test('GET /api/v1/locations/:id returns the created location', async ({ request 
 });
 
 test.describe('GET /api/v1/locations pagination', () => {
-  test('honors limit and pages through results with nextToken', async ({
+  test('honors pageSize and pages through results with page', async ({
     request,
   }) => {
-    const createdIds = new Set<string>();
+    const createdIds = new Set<number>();
     for (let i = 0; i < 3; i++) {
       const { body } = await createLocation(request);
       createdIds.add(body.id);
     }
 
-    const firstPage = await listLocationsPage(request, { limit: 2 });
+    const firstPage = await listLocationsPage(request, {
+      page: 1,
+      pageSize: 2,
+    });
     expect(firstPage.items).toHaveLength(2);
-    expect(firstPage.nextToken).toEqual(expect.any(String));
+    expect(firstPage).toMatchObject({
+      page: 1,
+      pageSize: 2,
+      total: 3,
+      totalPages: 2,
+    });
 
     const firstPageIds = firstPage.items.map((location) => location.id);
     expect(new Set(firstPageIds).size).toBe(2);
@@ -384,27 +387,45 @@ test.describe('GET /api/v1/locations pagination', () => {
     }
 
     const secondPage = await listLocationsPage(request, {
-      limit: 2,
-      nextToken: firstPage.nextToken as string,
+      page: 2,
+      pageSize: 2,
     });
     expect(secondPage.items).toHaveLength(1);
-    expect(secondPage.nextToken).toBeNull();
+    expect(secondPage).toMatchObject({
+      page: 2,
+      pageSize: 2,
+      total: 3,
+      totalPages: 2,
+    });
 
     const secondPageId = secondPage.items[0].id;
     expect(createdIds.has(secondPageId), `Unexpected id on second page: ${secondPageId}`).toBe(true);
     expect(firstPageIds).not.toContain(secondPageId);
 
-    expect([...firstPageIds, secondPageId].sort()).toEqual(
-      [...createdIds].sort()
+    expect([...firstPageIds, secondPageId].sort((a, b) => a - b)).toEqual(
+      [...createdIds].sort((a, b) => a - b)
     );
 
     const defaultPage = await listLocationsPage(request);
     expect(defaultPage.items).toHaveLength(3);
-    expect(defaultPage.nextToken).toBeNull();
+    expect(defaultPage).toMatchObject({
+      page: 1,
+      pageSize: 100,
+      total: 3,
+      totalPages: 1,
+    });
 
-    const singleItemPage = await listLocationsPage(request, { limit: 1 });
+    const singleItemPage = await listLocationsPage(request, {
+      page: 1,
+      pageSize: 1,
+    });
     expect(singleItemPage.items).toHaveLength(1);
-    expect(singleItemPage.nextToken).toEqual(expect.any(String));
+    expect(singleItemPage).toMatchObject({
+      page: 1,
+      pageSize: 1,
+      total: 3,
+      totalPages: 3,
+    });
   });
 });
 

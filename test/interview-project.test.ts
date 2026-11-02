@@ -11,11 +11,15 @@ describe('InterviewProjectStack', () => {
     template = Template.fromStack(stack);
   });
 
-  test('creates the locations table', () => {
-    template.resourceCountIs('AWS::DynamoDB::GlobalTable', 1);
-    template.hasResourceProperties('AWS::DynamoDB::GlobalTable', {
-      TableName: 'Locations',
+  test('creates the Postgres database cluster', () => {
+    template.resourceCountIs('AWS::RDS::DBCluster', 1);
+    template.hasResourceProperties('AWS::RDS::DBCluster', {
+      Engine: 'aurora-postgresql',
+      DatabaseName: 'locations_api',
+      EnableHttpEndpoint: true,
     });
+    template.resourceCountIs('AWS::RDS::DBInstance', 1);
+    template.resourceCountIs('AWS::DynamoDB::GlobalTable', 0);
   });
 
   test('creates the geodata queue with a five-minute visibility timeout', () => {
