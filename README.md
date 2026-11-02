@@ -67,3 +67,14 @@ docker compose up -d ministack
 npm run local-bootstrap
 npm run local-deploy
 ```
+
+## Improvements to be made for production
+
+* Use a logging library like AWS Lambda Powertools logger to save logs in JSON format
+* Add alarms for recurring errors and the dead letter queue filling up
+* Handle third party API rate limits by storing the last access time in a database
+* Use GitHub CI/CD to automatically run tests before allowing pull requests
+* Implement user authentication
+* Add a delete route
+* Update the list all locations route to allow filtering by fields like city, state, country
+* Standardize the city, state, and country names using the Geocoding API
