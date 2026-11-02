@@ -3,6 +3,7 @@ import * as apiGateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as path from 'path';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
@@ -14,6 +15,16 @@ import { Duration } from 'aws-cdk-lib/core';
 const FETCH_GEODATA_MAX_RECEIVE_COUNT = 5;
 const LOCATIONS_DB_NAME = 'locations_api';
 
+const getEnvVarOrThrowError = (name: string): string => {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+
+  return value;
+};
+
 export class InterviewProjectStack extends cdk.Stack {
   constructor(
     scope: Construct,
@@ -22,40 +33,50 @@ export class InterviewProjectStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
-    const databaseVpc = new ec2.Vpc(this, 'DatabaseVpc', {
-      maxAzs: 2,
-      natGateways: 0,
-      subnetConfiguration: [
-        {
-          name: 'Database',
-          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
-          cidrMask: 24,
-        },
-      ],
-    });
+    let database: rds.DatabaseCluster | undefined;
+    let databaseClusterArn: string;
+    let databaseSecretArn: string;
+    let databaseName: string;
 
-    const database = new rds.DatabaseCluster(this, 'LocationsDatabase', {
-      engine: rds.DatabaseClusterEngine.auroraPostgres({
-        version: rds.AuroraPostgresEngineVersion.VER_16_13,
-      }),
-      writer: props?.local
-        ? rds.ClusterInstance.provisioned('Writer', {
-            instanceType: ec2.InstanceType.of(
-              ec2.InstanceClass.T3,
-              ec2.InstanceSize.MEDIUM,
-            ),
-          })
-        : rds.ClusterInstance.serverlessV2('Writer'),
-      serverlessV2MinCapacity: 0.5,
-      serverlessV2MaxCapacity: 2,
-      enableDataApi: true,
-      defaultDatabaseName: LOCATIONS_DB_NAME,
-      credentials: rds.Credentials.fromGeneratedSecret('app'),
-      vpc: databaseVpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      deletionProtection: false,
-    });
+    if (props?.local) {
+      databaseClusterArn = getEnvVarOrThrowError('DATABASE_ARN');
+      databaseSecretArn = getEnvVarOrThrowError('DATABASE_SECRET_ARN');
+      databaseName = process.env.LOCATIONS_DB_NAME ?? LOCATIONS_DB_NAME;
+    }
+    else {
+      const databaseVpc = new ec2.Vpc(this, 'DatabaseVpc', {
+        maxAzs: 2,
+        natGateways: 0,
+        restrictDefaultSecurityGroup: false,
+        subnetConfiguration: [
+          {
+            name: 'Database',
+            subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+            cidrMask: 24,
+          },
+        ],
+      });
+
+      database = new rds.DatabaseCluster(this, 'LocationsDatabase', {
+        engine: rds.DatabaseClusterEngine.auroraPostgres({
+          version: rds.AuroraPostgresEngineVersion.VER_16_13,
+        }),
+        writer: rds.ClusterInstance.serverlessV2('Writer'),
+        serverlessV2MinCapacity: 0.5,
+        serverlessV2MaxCapacity: 2,
+        enableDataApi: true,
+        defaultDatabaseName: LOCATIONS_DB_NAME,
+        credentials: rds.Credentials.fromGeneratedSecret('app'),
+        vpc: databaseVpc,
+        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+        deletionProtection: false,
+      });
+
+      databaseClusterArn = database.clusterArn;
+      databaseSecretArn = database.secret!.secretArn;
+      databaseName = LOCATIONS_DB_NAME;
+    }
 
     const fetchGeodataDLQ = new sqs.Queue(
       this,
@@ -76,9 +97,9 @@ export class InterviewProjectStack extends cdk.Stack {
     );
 
     const passedEnvVars = {
-      DATABASE_ARN: database.clusterArn,
-      DATABASE_SECRET_ARN: database.secret?.secretArn!,
-      LOCATIONS_DB_NAME,
+      DATABASE_ARN: databaseClusterArn,
+      DATABASE_SECRET_ARN: databaseSecretArn,
+      LOCATIONS_DB_NAME: databaseName,
     };
 
     const fetchGeodataHandler = new NodejsFunction(
@@ -141,9 +162,32 @@ export class InterviewProjectStack extends cdk.Stack {
       },
     );
 
-    database.grantDataApiAccess(locationsApiHandler);
+    if (database) {
+      database.grantDataApiAccess(locationsApiHandler);
+      database.grantDataApiAccess(fetchGeodataHandler);
+    }
+    else {
+      const dataApiActions = [
+        'rds-data:ExecuteStatement',
+        'rds-data:BatchExecuteStatement',
+        'rds-data:BeginTransaction',
+        'rds-data:CommitTransaction',
+        'rds-data:RollbackTransaction',
+      ];
+
+      for (const handler of [locationsApiHandler, fetchGeodataHandler]) {
+        handler.addToRolePolicy(new iam.PolicyStatement({
+          actions: dataApiActions,
+          resources: [databaseClusterArn],
+        }));
+        handler.addToRolePolicy(new iam.PolicyStatement({
+          actions: ['secretsmanager:GetSecretValue'],
+          resources: [databaseSecretArn],
+        }));
+      }
+    }
+
     fetchGeodataQueue.grantSendMessages(locationsApiHandler);
-    database.grantDataApiAccess(fetchGeodataHandler);
 
     const locationsApi = new apiGateway.LambdaRestApi(
       this,
@@ -164,18 +208,18 @@ export class InterviewProjectStack extends cdk.Stack {
       description: 'API Gateway stage used by the Docker demo gateway',
     });
 
-     new cdk.CfnOutput(this, 'DatabaseClusterArn', {
-      value: database.clusterArn,
+    new cdk.CfnOutput(this, 'DatabaseClusterArn', {
+      value: databaseClusterArn,
       description: 'Aurora cluster ARN',
     });
 
     new cdk.CfnOutput(this, 'DatabaseSecretArn', {
-      value: passedEnvVars.DATABASE_SECRET_ARN,
+      value: databaseSecretArn,
       description: 'Secrets Manager ARN',
     });
 
     new cdk.CfnOutput(this, 'LocationsDbName', {
-      value: LOCATIONS_DB_NAME,
+      value: databaseName,
       description: 'Locations database name',
     });
   }

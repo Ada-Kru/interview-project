@@ -1,7 +1,9 @@
 services:
   ministack:
     container_name: ministack_main
-    image: ministackorg/ministack:1.5.35
+    image: ministackorg/ministack:1.5.35-full
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "127.0.0.1:${MINISTACK_PORT:-4566}:4566"
     environment:
@@ -51,6 +53,7 @@ services:
       CI: "true"
       DEMO_STATE_DIR: /tmp/demo
       DEMO_API_PORT: "8080"
+      DATABASE_MODE: local
     healthcheck:
       test:
         - CMD

@@ -3,6 +3,8 @@
 ## Run the demo in Docker
 
 Requires Docker with Compose v2. The demo runs on MiniStack, a local AWS emulator.
+MiniStack uses the host Docker socket to run a real Postgres container for the
+RDS Data API.
 
 ```bash
 docker compose up --build --wait
@@ -60,12 +62,19 @@ docker compose down
 
 ## Local development
 
-Start the emulator, bootstrap and deploy the stack, then run the API tests:
+Start the emulator, create the local Aurora database, bootstrap and deploy the
+stack, then run the migration and API tests:
 
 ```bash
 docker compose up -d ministack
+npm run local-db -- --write-env /tmp/demo/database.env
+set -a
+source /tmp/demo/database.env
+set +a
 npm run local-bootstrap
 npm run local-deploy
+npm run db:migrate -- --reset
+npm run test:api
 ```
 
 ## Improvements to be made for production

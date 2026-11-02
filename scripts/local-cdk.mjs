@@ -26,6 +26,7 @@ const env = {
   CDK_DEFAULT_REGION: process.env.CDK_DEFAULT_REGION ?? region,
   CDK_S3_FORCE_PATH_STYLE: process.env.CDK_S3_FORCE_PATH_STYLE ?? '1',
   CDK_CLI_TELEMETRY: process.env.CDK_CLI_TELEMETRY ?? 'false',
+  DATABASE_MODE: process.env.DATABASE_MODE ?? 'local',
 };
 
 const cdkBin = path.join(
