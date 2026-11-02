@@ -12,30 +12,32 @@ Since there is no delete route, each time the container is started the database 
 
 The API is then available at `http://localhost:8080/api/v1/locations`
 
-POST /locations        Create a new location
-PATCH /locations/{id}  Update a location
-GET /locations         Get a list of all locations
-GET /locations/{id}    Get a single location
+* POST /locations        Create a new location
+* PATCH /locations/{id}  Update a location
+* GET /locations         Get a list of all locations
+* GET /locations/{id}    Get a single location
 
-### Request bodies
+### Example request bodies
 
-`POST /locations` all fields required:
+`POST /locations` All fields required.  Latitude and longitude will be fetched from the API shortly, they will be null until then:
 
 ```json
 {
-  "name": "Space Needle",
-  "city": "Seattle",
-  "state": "WA",
+  "name": "Dallas Branch",
+  "city": "Dallas",
+  "state": "TX",
   "country": "United States"
 }
 ```
 
-`PATCH /locations/{id}` - all fields are optional, at least one is required:
+`PATCH /locations/{id}` All fields are optional, at least one is required.  The "city", "state", and "country" fields will trigger an update of the latitude and longitude:
 
 ```json
 {
+  "name": "Portland Branch",
   "city": "Portland",
-  "state": "Oregon"
+  "state": "Oregon",
+  "country": "United States"
 }
 ```
 
