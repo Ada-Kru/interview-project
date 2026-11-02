@@ -12,10 +12,10 @@ Since there is no delete route, each time the container is started the database 
 
 The API is then available at `http://localhost:8080/api/v1/locations`
 
-* POST /locations        Create a new location
-* PATCH /locations/{id}  Update a location
-* GET /locations         Get a list of all locations
-* GET /locations/{id}    Get a single location
+* POST  `/locations`        Create a new location
+* PATCH `/locations/{id}`  Update an existing location
+* GET   `/locations`         Get a list of all locations ordered by creation date (newest first)
+* GET   `/locations/{id}`    Get a single location
 
 ### Example request bodies
 
