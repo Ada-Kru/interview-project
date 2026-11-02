@@ -16,7 +16,7 @@ import {
   type QueryCommandInput,
   UpdateCommand
 } from '@aws-sdk/lib-dynamodb';
-import { LocationGeodataStatus } from './definitions/types';
+import { Location, LocationGeodataStatus } from './definitions/types';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 
 
@@ -26,6 +26,11 @@ const docClient = DynamoDBDocumentClient.from(ddbClient);
 const sqsClient = new SQSClient({});
 const LOCATIONS_TABLE_NAME = process.env.LOCATIONS_TABLE_NAME;
 const LOCATIONS_GEODATA_QUEUE_URL = process.env.LOCATIONS_GEODATA_QUEUE_URL;
+const LOCATION_FIELDS_TRIGGER_GEOCODE = [
+  'city',
+  'state',
+  'country'
+] as const satisfies ReadonlyArray<keyof Location>;
 
 const normalizePlacePart = (value: string) =>
   value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
@@ -216,7 +221,7 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
       };
     }
 
-    const locationChanged = (['city', 'state', 'country'] as const).some(
+    const locationChanged = LOCATION_FIELDS_TRIGGER_GEOCODE.some(
       (field) =>
         body[field] !== undefined &&
         normalizePlacePart(body[field]) !== normalizePlacePart(matchedLocation[field] ?? '')
@@ -250,7 +255,7 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
     }
 
     return {
-      statusCode: 201,
+      statusCode: 200,
       body: patchResult.Attributes,
     };
   }

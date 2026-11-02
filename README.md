@@ -1,30 +1,59 @@
-# Welcome to your CDK TypeScript project
-
-This is a blank project for CDK development with TypeScript.
-
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+# Interview Project For Adam Krueger
 
 ## Run the demo in Docker
 
-Requires Docker with Compose v2. The demo runs against
-[MiniStack](https://ministack.org/), a local AWS emulator.
+Requires Docker with Compose v2. The demo runs on MiniStack, a local AWS emulator.
 
 ```bash
 docker compose up --build --wait
 ```
 
-The emulator state is not persisted between runs: each `up` bootstraps and
-deploys into a clean MiniStack instance.
+Since there is no delete route, each time the container is started the database is intentionally cleared.
 
-The API is then available at `http://localhost:8080/api/v1/locations`.
+The API is then available at `http://localhost:8080/api/v1/locations`
 
-GET /locations         Get a list of all locations
-GET /locations/{id}    Get a single location
 POST /locations        Create a new location
 PATCH /locations/{id}  Update a location
+GET /locations         Get a list of all locations
+GET /locations/{id}    Get a single location
 
+### Request bodies
+
+`POST /locations` all fields required:
+
+```json
+{
+  "name": "Space Needle",
+  "city": "Seattle",
+  "state": "WA",
+  "country": "United States"
+}
+```
+
+`PATCH /locations/{id}` - all fields are optional, at least one is required:
+
+```json
+{
+  "city": "Portland",
+  "state": "Oregon"
+}
+```
+
+### Running tests
+
+To run tests:
 ```bash
-docker compose down   # stop
+docker compose exec demo npm run test:unit
+```
+```bash
+docker compose exec demo npm run test:api
+```
+
+## Stopping the container
+
+To stop the container:
+```bash
+docker compose down
 ```
 
 ## Local development
@@ -35,22 +64,4 @@ Start the emulator, bootstrap and deploy the stack, then run the API tests:
 docker compose up -d ministack
 npm run local-bootstrap
 npm run local-deploy
-npm run test:api
 ```
-
-MiniStack IAM enforcement is disabled by default. The CDK bootstrap staging
-bucket denies non-TLS requests, so enabling `MINISTACK_AUTH=true` requires
-serving MiniStack over HTTPS.
-
-## Useful commands
-
-* `npm run build`          type-check the project
-* `npm run watch`          watch for changes and type-check
-* `npm run local-bootstrap` bootstrap the CDK environment in MiniStack
-* `npm run local-synth`    synthesize the stack against MiniStack
-* `npm run local-deploy`   deploy the stack to MiniStack
-* `npm run test:api`       run the Playwright API tests against MiniStack
-
-* `npx cdk deploy`  deploy this stack to your default AWS account/region
-* `npx cdk diff`    compare deployed stack with current state
-* `npx cdk synth`   emits the synthesized CloudFormation template

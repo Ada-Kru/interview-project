@@ -148,7 +148,7 @@ async function patchLocation(
 ): Promise<LocationRecord> {
   const response = await request.patch(`${LOCATIONS_PATH}/${id}`, { data: patch });
 
-  expect(response.status()).toBe(201);
+  expect(response.status()).toBe(200);
   return (await response.json()) as LocationRecord;
 }
 
