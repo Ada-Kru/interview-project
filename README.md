@@ -75,6 +75,8 @@ To save time, I used AI to implement the Playwright API tests and Jest unit test
 I also used the AI to help containerize the project in Docker so that it could easily be demoed.
 Also, when searching for solutions to issues I ran into, I checked the AI result on the Google search page, but did not use it to make any architecture decisions and wrote the code myself.
 
+With permission I created a demonstration branch at `https://github.com/Ada-Kru/interview-project/tree/switch_db_to_postgres` where AI was used to switch the database from DynamoDB to Postgres.  I believe Postgres is the more correct database choice, but I initially did not implement it due to it not being supported by the Localstack free tier.
+
 
 ## Improvements to be made for production
 
@@ -87,5 +89,5 @@ Also, when searching for solutions to issues I ran into, I checked the AI result
 * Add a delete route
 * Update the list all locations route to allow filtering by fields like city, state, country
 * Standardize the city, state, and country names using the Geocoding API (Ft. Worth becomes Fort Worth)
-  * Duplicates in should also be detected and removed using the Geocoding API
+  * Duplicates with differently spelled names for the same location should be detected and removed using the Geocoding API
 * Add the ability to search by different fields and by a radius from a city or area code
