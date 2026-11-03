@@ -160,6 +160,16 @@ async function patchLocation(
   return (await response.json()) as LocationRecord;
 }
 
+async function expectDuplicateConflict(
+  response: APIResponse,
+  existingId: number
+): Promise<void> {
+  expect(response.status()).toBe(409);
+
+  const body = (await response.json()) as { error: string };
+  expect(body.error).toContain(String(existingId));
+}
+
 async function expectValidationError(
   response: APIResponse,
   expectedPaths: string[][],
@@ -355,6 +365,63 @@ test('GET /api/v1/locations/:id returns the created location', async ({ request 
   expect(await response.json()).toMatchObject({
     id: created.id,
     ...payload,
+  });
+});
+
+test.describe('Duplicate location detection', () => {
+  test('POST /api/v1/locations rejects a duplicate location in the same city', async ({
+    request,
+  }) => {
+    const { payload, body: created } = await createLocation(request, {
+      name: 'Duplicate Branch',
+      city: 'Seattle',
+      state: 'WA',
+      country: 'United States',
+    });
+
+    const response = await request.post(LOCATIONS_PATH, {
+      data: {
+        name: payload.name.toUpperCase(),
+        city: 'seattle',
+        state: 'wa',
+        country: 'united states',
+      },
+    });
+
+    await expectDuplicateConflict(response, created.id);
+
+    const locations = await listAllLocations(request);
+    expect(locations.map((location) => location.id)).toEqual([created.id]);
+  });
+
+  test('PATCH /api/v1/locations/:id rejects a patch that duplicates another location', async ({
+    request,
+  }) => {
+    const { payload: portland, body: existing } = await createLocation(request, {
+      name: 'Portland Branch',
+      city: 'Portland',
+      state: 'OR',
+      country: 'United States',
+    });
+
+    const { body: target } = await createLocation(request);
+
+    const response = await request.patch(`${LOCATIONS_PATH}/${target.id}`, {
+      data: {
+        name: portland.name,
+        city: portland.city,
+        state: portland.state,
+      },
+    });
+
+    await expectDuplicateConflict(response, existing.id);
+
+    await expectLocationUnchanged(request, target);
+
+    const locations = await listAllLocations(request);
+    expect(locations.map((location) => location.id).sort()).toEqual(
+      [existing.id, target.id].sort()
+    );
   });
 });
 

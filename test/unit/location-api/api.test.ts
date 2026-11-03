@@ -184,8 +184,12 @@ describe('GET /api/v1/locations', () => {
 
 describe('POST /api/v1/locations', () => {
   it('creates a location and enqueues geocoding', async () => {
-    rdsMock.on(ExecuteStatementCommand).resolves(
-      locationResult([seattleLocation]),
+    rdsMock.on(ExecuteStatementCommand).callsFake((input) =>
+      Promise.resolve(
+        input.sql.includes('lower(btrim(name))')
+          ? locationResult([])
+          : locationResult([seattleLocation]),
+      ),
     );
     sqsMock.on(SendMessageCommand).resolves({ MessageId: 'msg-1' });
 
@@ -205,7 +209,12 @@ describe('POST /api/v1/locations', () => {
     expect(result.statusCode).toBe(201);
     expect(JSON.parse(result.body)).toEqual(seattleLocation);
 
-    expect(rdsMock.commandCalls(ExecuteStatementCommand)).toHaveLength(1);
+    expect(rdsMock.commandCalls(ExecuteStatementCommand)).toHaveLength(2);
+    expect(
+      rdsMock.commandCalls(ExecuteStatementCommand).filter(
+        (call) => call.args?.[0]?.input?.sql?.includes('INSERT INTO locations'),
+      ),
+    ).toHaveLength(1);
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
   });
 
@@ -220,6 +229,155 @@ describe('POST /api/v1/locations', () => {
 
     expect(result.statusCode).toBe(422);
     expect(rdsMock.commandCalls(ExecuteStatementCommand)).toHaveLength(0);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+  });
+
+  const validPayload = {
+    name: 'Seattle Center',
+    city: 'Seattle',
+    state: 'WA',
+    country: 'United States',
+  };
+
+  it('rejects a duplicate location with the same name, city, state, and country', async () => {
+    rdsMock.on(ExecuteStatementCommand).callsFake((input) =>
+      Promise.resolve(
+        input.sql.includes('lower(btrim(name))')
+          ? locationResult([{
+              ...seattleLocation,
+              id: 42,
+              name: 'seattle center',
+              city: 'seattle',
+              state: 'wa',
+              country: 'united states',
+            }])
+          : locationResult([seattleLocation]),
+      ),
+    );
+
+    const result = await handler(
+      makeApiEvent({
+        httpMethod: 'POST',
+        body: JSON.stringify(validPayload),
+      }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(409);
+    expect(JSON.parse(result.body).error).toContain('42');
+    expect(
+      rdsMock.commandCalls(ExecuteStatementCommand).filter(
+        (call) => call.args?.[0]?.input?.sql?.includes('INSERT INTO locations'),
+      ),
+    ).toHaveLength(0);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+  });
+
+  it('allows the same name in a different city', async () => {
+    rdsMock.on(ExecuteStatementCommand).callsFake((input) =>
+      Promise.resolve(
+        input.sql.includes('lower(btrim(name))')
+          ? locationResult([])
+          : locationResult([seattleLocation]),
+      ),
+    );
+    sqsMock.on(SendMessageCommand).resolves({ MessageId: 'msg-1' });
+
+    const result = await handler(
+      makeApiEvent({
+        httpMethod: 'POST',
+        body: JSON.stringify(validPayload),
+      }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(201);
+    expect(
+      rdsMock.commandCalls(ExecuteStatementCommand).filter(
+        (call) => call.args?.[0]?.input?.sql?.includes('INSERT INTO locations'),
+      ),
+    ).toHaveLength(1);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
+  });
+});
+
+const storedLocation: LocationRow = {
+  id: 1,
+  name: 'Seattle Center',
+  city: 'Seattle',
+  state: 'WA',
+  country: 'United States',
+  latitude: 47.6062,
+  longitude: -122.3321,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  geodataStatus: 'MATCHED',
+};
+
+const patchLocation = (id: number, body: unknown) =>
+  makeApiEvent({
+    httpMethod: 'PATCH',
+    path: `/api/v1/locations/${id}`,
+    resource: '/api/v1/locations/{id}',
+    pathParameters: { id: String(id) },
+    body: JSON.stringify(body),
+  });
+
+describe('PATCH /api/v1/locations/:id duplicate detection', () => {
+  it('rejects a patch that duplicates another location', async () => {
+    rdsMock.on(ExecuteStatementCommand)
+      .resolvesOnce(locationResult([storedLocation]))
+      .resolvesOnce(locationResult([{
+        ...storedLocation,
+        id: 2,
+        name: 'portland branch',
+        city: 'portland',
+        state: 'or',
+        country: 'united states',
+      }]));
+
+    const result = await handler(
+      patchLocation(1, {
+        name: 'Portland Branch',
+        city: 'Portland',
+        state: 'OR',
+      }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(409);
+    expect(JSON.parse(result.body).error).toContain('2');
+    expect(
+      rdsMock.commandCalls(ExecuteStatementCommand).filter(
+        (call) => call.args?.[0]?.input?.sql?.includes('UPDATE locations'),
+      ),
+    ).toHaveLength(0);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+  });
+
+  it('allows changing only the casing of its own name', async () => {
+    rdsMock.on(ExecuteStatementCommand)
+      .resolvesOnce(locationResult([storedLocation]))
+      .resolvesOnce(locationResult([{
+        ...storedLocation,
+        name: 'SEATTLE CENTER',
+      }]));
+
+    const result = await handler(
+      patchLocation(1, { name: 'SEATTLE CENTER' }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(
+      rdsMock.commandCalls(ExecuteStatementCommand).filter(
+        (call) => call.args?.[0]?.input?.sql?.includes('lower(btrim(name))'),
+      ),
+    ).toHaveLength(0);
+    expect(
+      rdsMock.commandCalls(ExecuteStatementCommand).filter(
+        (call) => call.args?.[0]?.input?.sql?.includes('UPDATE locations'),
+      ),
+    ).toHaveLength(1);
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
   });
 });

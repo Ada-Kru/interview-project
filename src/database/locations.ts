@@ -133,6 +133,43 @@ export async function getLocation(id: number): Promise<Location | null> {
   return rows.length > 0 ? mapLocation(rows[0]) : null;
 }
 
+export async function findLocationByPlace(
+  data: LocationCreateData,
+  excludeId?: number,
+): Promise<Location | null> {
+  const parameters: SqlParameter[] = [
+    stringParam('name', data.name),
+    stringParam('city', data.city),
+    stringParam('state', data.state),
+    stringParam('country', data.country),
+  ];
+
+  const excludeClause = excludeId === undefined
+    ? ''
+    : 'AND id <> :excludeId';
+
+  if (excludeId !== undefined) {
+    parameters.push(longParam('excludeId', excludeId));
+  }
+
+  const rows = await executeStatement(
+    `
+      SELECT ${LOCATION_COLUMNS}
+      FROM locations
+      WHERE lower(btrim(name)) = lower(btrim(:name))
+        AND lower(btrim(city)) = lower(btrim(:city))
+        AND lower(btrim(state)) = lower(btrim(:state))
+        AND lower(btrim(country)) = lower(btrim(:country))
+        ${excludeClause}
+      ORDER BY id
+      LIMIT 1
+    `,
+    parameters,
+  );
+
+  return rows.length > 0 ? mapLocation(rows[0]) : null;
+}
+
 export async function createLocation(
   data: LocationCreateData,
 ): Promise<Location> {

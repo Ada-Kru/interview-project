@@ -10,6 +10,7 @@ import { Location, LocationGeodataStatus } from './definitions/types';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import {
   createLocation,
+  findLocationByPlace,
   getLocation,
   listLocations,
   updateLocation,
@@ -37,6 +38,24 @@ const parsePathIntId = (value: string): number | undefined => {
 
 const normalizePlacePart = (value: string) =>
   value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
+
+const createLocationHash = (
+  location: Pick<Location, 'name' | 'city' | 'state' | 'country'>,
+) => [
+  location.name,
+  location.city,
+  location.state,
+  location.country,
+].map(normalizePlacePart).join('_-_-');
+
+const duplicateLocationResponse = (existingLocation: Location) => ({
+  statusCode: 409,
+  body: {
+    error:
+      `A branch with the same name already exists in this city. ` +
+      `Id: ${existingLocation.id}`,
+  },
+});
 
 router.get('/api/v1/locations', async ({ valid }) => {
 
@@ -122,6 +141,12 @@ router.post('/api/v1/locations', async ({ valid }) => {
 
   let newLocation: Location;
   try {
+    const existingLocation = await findLocationByPlace(data);
+
+    if (existingLocation) {
+      return duplicateLocationResponse(existingLocation);
+    }
+
     newLocation = await createLocation(data);
   }
   catch (err) {
@@ -175,6 +200,24 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
         statusCode: 404,
         body: { error: 'Location not found' },
       };
+    }
+
+    const updatedPlace = {
+      name: body.name ?? matchedLocation.name,
+      city: body.city ?? matchedLocation.city,
+      state: body.state ?? matchedLocation.state,
+      country: body.country ?? matchedLocation.country,
+    };
+
+    const placeChanged =
+      createLocationHash(updatedPlace) !== createLocationHash(matchedLocation);
+
+    if (placeChanged) {
+      const existingLocation = await findLocationByPlace(updatedPlace, id);
+
+      if (existingLocation) {
+        return duplicateLocationResponse(existingLocation);
+      }
     }
 
     const locationChanged = LOCATION_FIELDS_TRIGGER_GEOCODE.some(
