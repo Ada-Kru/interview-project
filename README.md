@@ -14,7 +14,7 @@ The API is then available at `http://localhost:8080/api/v1/locations`
 
 * POST  `/locations`        Create a new location
 * PATCH `/locations/{id}`  Update an existing location
-* GET   `/locations`         Get a list of all locations ordered by creation date (newest first)
+* GET   `/locations`         Get a list of all locations ordered by creation date (newest first) Supports `?limit=` and `?nextToken=`
 * GET   `/locations/{id}`    Get a single location
 
 ### Example request bodies
@@ -68,6 +68,14 @@ npm run local-bootstrap
 npm run local-deploy
 ```
 
+## AI usage
+
+I mainly used AI towards the end of the project, after I had already implemented the design and functionality.
+To save time, I used AI to implement the Playwright API tests and Jest unit tests, but I specified what each individual test should check for.
+I also used the AI to help containerize the project in Docker so that it could easily be demoed.
+Also, when searching for solutions to issues I ran into, I checked the AI result on the Google search page, but did not use it to make any architecture decisions and wrote the code myself.
+
+
 ## Improvements to be made for production
 
 * Use a logging library like AWS Lambda Powertools logger to save logs in JSON format
@@ -79,3 +87,4 @@ npm run local-deploy
 * Add a delete route
 * Update the list all locations route to allow filtering by fields like city, state, country
 * Standardize the city, state, and country names using the Geocoding API
+* Add the ability to search by different fields and by a radius from a city or area code

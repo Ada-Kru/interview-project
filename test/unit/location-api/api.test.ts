@@ -5,6 +5,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { handler } from '../../../src/lambda-functions/location-api/api';
@@ -18,6 +19,7 @@ const context = {} as Context;
 beforeEach(() => {
   ddbMock.reset();
   sqsMock.reset();
+  ddbMock.on(ScanCommand).resolves({ Items: [] });
   jest.spyOn(console, 'error').mockImplementation(() => undefined);
 });
 

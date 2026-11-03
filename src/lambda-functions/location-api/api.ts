@@ -14,6 +14,8 @@ import {
   PutCommand,
   QueryCommand,
   type QueryCommandInput,
+  ScanCommand,
+  type ScanCommandOutput,
   UpdateCommand
 } from '@aws-sdk/lib-dynamodb';
 import { Location, LocationGeodataStatus } from './definitions/types';
@@ -32,8 +34,56 @@ const LOCATION_FIELDS_TRIGGER_GEOCODE = [
   'country'
 ] as const satisfies ReadonlyArray<keyof Location>;
 
-const normalizePlacePart = (value: string) =>
-  value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
+const normalizeLocationPart = (part: string) => {
+  return part.trim().toLocaleLowerCase('en-US');
+}
+
+const createLocationHash = (loc: Record<string, string> | Location) => {
+  return [
+    loc.name,
+    loc.city,
+    loc.state,
+    loc.country
+  ].map(normalizeLocationPart).join('_-_-');
+};
+
+const getExistingLocation = async (
+  loc: Record<string, string> | Location
+): Promise<Location | undefined> => {
+
+  const locHash = createLocationHash(loc);
+  let startKey: Record<string, any> | undefined | null = null;
+
+  while (startKey !== undefined) {
+    const page: ScanCommandOutput = await docClient.send(
+      new ScanCommand({
+        TableName: LOCATIONS_TABLE_NAME,
+        ProjectionExpression: '#id, #name, #city, #state, #country',
+        ExpressionAttributeNames: {
+          '#id': 'id',
+          '#name': 'name',
+          '#city': 'city',
+          '#state': 'state',
+          '#country': 'country',
+        },
+         ExclusiveStartKey: startKey ?? undefined,
+      })
+    );
+
+    const pageItems = (page.Items ?? []) as Location[];
+    const existingLocation = pageItems.find(
+      (l) => createLocationHash(l as Location) === locHash
+    );
+
+    if (existingLocation) {
+      return existingLocation;
+    }
+
+    startKey = page.LastEvaluatedKey;
+  }
+
+  return undefined;
+};
 
 router.get('/api/v1/locations', async ({ valid }) => {
 
@@ -163,6 +213,20 @@ router.post('/api/v1/locations', async ({ valid }) => {
   };
 
   try {
+    // Note that this does not check for capitalization or abbreviated
+    // city/state/country names at this time
+    const existingLoc = await getExistingLocation(data as Location);
+    if (existingLoc) {
+      return {
+        statusCode: 409,
+        body: {
+          error:
+            `A branch with the same name already exists in this city. ` +
+            `Id: ${existingLoc.id}`,
+        },
+      };
+    };
+
     await docClient.send(
       new PutCommand({
         TableName: LOCATIONS_TABLE_NAME,
@@ -221,10 +285,37 @@ router.patch('/api/v1/locations/:id', async ({ valid, params }) => {
       };
     }
 
+    const updatedLoc = {
+      name: body.name ?? matchedLocation.name,
+      city: body.city ?? matchedLocation.city,
+      state: body.state ?? matchedLocation.state,
+      country: body.country ?? matchedLocation.country,
+    };
+
+    const placeChanged =
+      createLocationHash(updatedLoc) !== createLocationHash(matchedLocation);
+
+    if (placeChanged) {
+      const existingLoc = await getExistingLocation(updatedLoc);
+      if (existingLoc) {
+        return {
+          statusCode: 409,
+          body: {
+            error:
+              `A branch with the same name already exists in this city. ` +
+              `Id: ${existingLoc.id}`,
+          },
+        };
+      }
+    }
+
     const locationChanged = LOCATION_FIELDS_TRIGGER_GEOCODE.some(
       (field) =>
         body[field] !== undefined &&
-        normalizePlacePart(body[field]) !== normalizePlacePart(matchedLocation[field] ?? '')
+        (
+          normalizeLocationPart(body[field]) !==
+          normalizeLocationPart(matchedLocation[field] ?? '')
+        )
     );
 
     const patchResult = await docClient.send(
