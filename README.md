@@ -86,5 +86,6 @@ Also, when searching for solutions to issues I ran into, I checked the AI result
 * Implement user authentication
 * Add a delete route
 * Update the list all locations route to allow filtering by fields like city, state, country
-* Standardize the city, state, and country names using the Geocoding API
+* Standardize the city, state, and country names using the Geocoding API (Ft. Worth becomes Fort Worth)
+  * Duplicates in should also be detected and removed using the Geocoding API
 * Add the ability to search by different fields and by a radius from a city or area code
