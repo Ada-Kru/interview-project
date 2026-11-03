@@ -6,6 +6,7 @@ import {
   PutCommand,
   QueryCommand,
   ScanCommand,
+  UpdateCommand,
 } from '@aws-sdk/lib-dynamodb';
 import { SendMessageCommand, SQSClient } from '@aws-sdk/client-sqs';
 import { handler } from '../../../src/lambda-functions/location-api/api';
@@ -127,5 +128,131 @@ describe('POST /api/v1/locations', () => {
     expect(result.statusCode).toBe(422);
     expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
     expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+  });
+
+  const validPayload = {
+    name: 'Seattle Center',
+    city: 'Seattle',
+    state: 'WA',
+    country: 'United States',
+  };
+
+  it('rejects a duplicate location with the same name, city, state, and country', async () => {
+    ddbMock.on(ScanCommand).resolves({
+      Items: [{
+        id: 'existing-id',
+        name: 'seattle center',
+        city: 'seattle',
+        state: 'wa',
+        country: 'united states',
+      }],
+    });
+
+    const result = await handler(
+      makeApiEvent({
+        httpMethod: 'POST',
+        body: JSON.stringify(validPayload),
+      }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(409);
+    expect(JSON.parse(result.body).error).toContain('existing-id');
+    expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+  });
+
+  it('allows the same name in a different city', async () => {
+    ddbMock.on(ScanCommand).resolves({
+      Items: [{
+        id: 'existing-id',
+        name: 'Seattle Center',
+        city: 'Portland',
+        state: 'OR',
+        country: 'United States',
+      }],
+    });
+    ddbMock.on(PutCommand).resolves({});
+    sqsMock.on(SendMessageCommand).resolves({ MessageId: 'msg-1' });
+
+    const result = await handler(
+      makeApiEvent({
+        httpMethod: 'POST',
+        body: JSON.stringify(validPayload),
+      }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(201);
+    expect(ddbMock.commandCalls(PutCommand)).toHaveLength(1);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
+  });
+});
+
+const storedLocation = {
+  id: 'loc-1',
+  name: 'Seattle Center',
+  city: 'Seattle',
+  state: 'WA',
+  country: 'United States',
+  latitude: 47.6062,
+  longitude: -122.3321,
+  createdAt: '2026-01-01T00:00:00.000Z',
+  geodataStatus: 'MATCHED',
+  gsiPartition: 'ALL_ITEMS',
+};
+
+const patchLocation = (id: string, body: unknown) =>
+  makeApiEvent({
+    httpMethod: 'PATCH',
+    path: `/api/v1/locations/${id}`,
+    resource: '/api/v1/locations/{id}',
+    pathParameters: { id },
+    body: JSON.stringify(body),
+  });
+
+describe('PATCH /api/v1/locations/:id duplicate detection', () => {
+  it('rejects a patch that duplicates another location', async () => {
+    ddbMock.on(GetCommand).resolves({ Item: storedLocation });
+    ddbMock.on(ScanCommand).resolves({
+      Items: [{
+        id: 'loc-2',
+        name: 'portland branch',
+        city: 'portland',
+        state: 'or',
+        country: 'united states',
+      }],
+    });
+    ddbMock.on(UpdateCommand).resolves({ Attributes: {} });
+
+    const result = await handler(
+      patchLocation('loc-1', {
+        name: 'Portland Branch',
+        city: 'Portland',
+        state: 'OR',
+      }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(409);
+    expect(JSON.parse(result.body).error).toContain('loc-2');
+    expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(0);
+    expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
+  });
+
+  it('allows changing only the casing of its own name', async () => {
+    ddbMock.on(GetCommand).resolves({ Item: storedLocation });
+    ddbMock.on(UpdateCommand).resolves({
+      Attributes: { ...storedLocation, name: 'SEATTLE CENTER' },
+    });
+
+    const result = await handler(
+      patchLocation('loc-1', { name: 'SEATTLE CENTER' }),
+      context,
+    );
+
+    expect(result.statusCode).toBe(200);
+    expect(ddbMock.commandCalls(ScanCommand)).toHaveLength(0);
+    expect(ddbMock.commandCalls(UpdateCommand)).toHaveLength(1);
   });
 });
