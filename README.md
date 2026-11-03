@@ -83,7 +83,10 @@ npm run test:api
 * Add alarms for recurring errors and the dead letter queue filling up
 * Handle third party API rate limits by storing the last access time in a database
 * Use GitHub CI/CD to automatically run tests before allowing pull requests
+* Store environment variables in a single place and fail if required variables don't exist
 * Implement user authentication
 * Add a delete route
 * Update the list all locations route to allow filtering by fields like city, state, country
-* Standardize the city, state, and country names using the Geocoding API
+* Standardize the city, state, and country names using the Geocoding API (Ft. Worth becomes Fort Worth)
+  * Duplicates with differently spelled names for the same location should be detected and removed using the Geocoding API
+* Add the ability to search by different fields and by a radius from a city or area code
